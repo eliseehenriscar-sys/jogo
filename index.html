@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jogo Pong</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #000;
+    }
+
+    #game {
+      position: relative;
+      width: 800px;
+      height: 400px;
+      background-color: #222;
+      border: 2px solid white;
+    }
+
+    .paddle {
+      position: absolute;
+      width: 10px;
+      height: 100px;
+      background-color: white;
+    }
+
+    #paddle-left {
+      left: 0;
+    }
+
+    #paddle-right {
+      right: 0;
+    }
+
+    #ball {
+      position: absolute;
+      width: 15px;
+      height: 15px;
+      background-color: white;
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <div id="paddle-left" class="paddle"></div>
+    <div id="paddle-right" class="paddle"></div>
+    <div id="ball"></div>
+  </div>
+
+  <script>
+    const ball = document.getElementById("ball");
+    const paddleLeft = document.getElementById("paddle-left");
+    const paddleRight = document.getElementById("paddle-right");
+    const game = document.getElementById("game");
+
+    let ballDirectionX = 2;
+    let ballDirectionY = 2;
+    let ballSpeed = 2;
+    let paddleSpeed = 25;
+    let ballPosX = 400; // Posição inicial da bola (centro)
+    let ballPosY = 200; // Posição inicial da bola (centro)
+    let paddleLeftPosY = 150;
+    let paddleRightPosY = 150;
+
+    let paddleLeftHeight = 100;
+    let paddleRightHeight = 100;
+    let gameHeight = 400;
+    let gameWidth = 800;
+
+    let leftScore = 0;
+    let rightScore = 0;
+
+    function updateBallPosition() {
+      ballPosX += ballDirectionX;
+      ballPosY += ballDirectionY;
+
+      // Verifica colisões com o teto e o chão
+      if (ballPosY <= 0 || ballPosY >= gameHeight - 15) {
+        ballDirectionY = -ballDirectionY;
+      }
+
+      // Verifica colisão com as raquetes
+      if (
+        ballPosX <= 15 &&
+        ballPosY >= paddleLeftPosY &&
+        ballPosY <= paddleLeftPosY + paddleLeftHeight
+      ) {
+        ballDirectionX = -ballDirectionX;
+      }
+
+      if (
+        ballPosX >= gameWidth - 30 &&
+        ballPosY >= paddleRightPosY &&
+        ballPosY <= paddleRightPosY + paddleRightHeight
+      ) {
+        ballDirectionX = -ballDirectionX;
+      }
+
+      // Verifica se a bola saiu do campo
+      if (ballPosX <= 0) {
+        rightScore++;
+        resetBall();
+      }
+      if (ballPosX >= gameWidth - 15) {
+        leftScore++;
+        resetBall();
+      }
+
+      ball.style.left = `${ballPosX}px`;
+      ball.style.top = `${ballPosY}px`;
+    }
+
+    function movePaddles() {
+      document.addEventListener("keydown", (e) => {
+        // Movimenta a raquete da esquerda
+        if (e.key === "w" && paddleLeftPosY > 0) {
+          paddleLeftPosY -= paddleSpeed;
+        }
+        if (e.key === "s" && paddleLeftPosY < gameHeight - paddleLeftHeight) {
+          paddleLeftPosY += paddleSpeed;
+        }
+
+        // Movimenta a raquete da direita
+        if (e.key === "ArrowUp" && paddleRightPosY > 0) {
+          paddleRightPosY -= paddleSpeed;
+        }
+        if (e.key === "ArrowDown" && paddleRightPosY < gameHeight - paddleRightHeight) {
+          paddleRightPosY += paddleSpeed;
+        }
+
+        paddleLeft.style.top = `${paddleLeftPosY}px`;
+        paddleRight.style.top = `${paddleRightPosY}px`;
+      });
+    }
+
+    function resetBall() {
+      ballPosX = gameWidth / 2 - 7.5;
+      ballPosY = gameHeight / 2 - 7.5;
+      ballDirectionX = -ballDirectionX;
+      ballDirectionY = 2;
+    }
+
+    function gameLoop() {
+      updateBallPosition();
+      movePaddles();
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
