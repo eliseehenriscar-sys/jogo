@@ -3,14 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Jogo Pong</title>
+  <title>Jogo Pong - Automático</title>
   <style>
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
-
     body {
       display: flex;
       justify-content: center;
@@ -18,44 +17,44 @@
       height: 100vh;
       background-color: #000;
     }
-
     #game {
       position: relative;
       width: 800px;
       height: 400px;
       background-color: #222;
       border: 2px solid white;
+      overflow: hidden;
     }
-
     .paddle {
       position: absolute;
       width: 10px;
       height: 100px;
       background-color: white;
     }
-
-    #paddle-left {
-      left: 0;
-    }
-
-    #paddle-right {
-      right: 0;
-    }
-
+    #paddle-left  { left: 0; }
+    #paddle-right { right: 0; }
     #ball {
       position: absolute;
       width: 15px;
       height: 15px;
       background-color: white;
       border-radius: 50%;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
+    }
+    #score {
+      position: absolute;
+      top: 20px;
+      width: 100%;
+      text-align: center;
+      color: white;
+      font-family: Arial, sans-serif;
+      font-size: 32px;
+      pointer-events: none;
     }
   </style>
 </head>
 <body>
   <div id="game">
+    <div id="score">0 - 0</div>
     <div id="paddle-left" class="paddle"></div>
     <div id="paddle-right" class="paddle"></div>
     <div id="ball"></div>
@@ -65,102 +64,109 @@
     const ball = document.getElementById("ball");
     const paddleLeft = document.getElementById("paddle-left");
     const paddleRight = document.getElementById("paddle-right");
-    const game = document.getElementById("game");
+    const scoreElement = document.getElementById("score");
 
-    let ballDirectionX = 2;
+    let ballPosX = 400;
+    let ballPosY = 200;
+    let ballDirectionX = 3;
     let ballDirectionY = 2;
-    let ballSpeed = 2;
-    let paddleSpeed = 25;
-    let ballPosX = 400; // Posição inicial da bola (centro)
-    let ballPosY = 200; // Posição inicial da bola (centro)
+
     let paddleLeftPosY = 150;
     let paddleRightPosY = 150;
-
-    let paddleLeftHeight = 100;
-    let paddleRightHeight = 100;
-    let gameHeight = 400;
-    let gameWidth = 800;
+    const paddleHeight = 100;
+    const paddleSpeed = 4;        // vitesse de l'IA (augmente pour plus de difficulté)
 
     let leftScore = 0;
     let rightScore = 0;
+    const gameWidth = 800;
+    const gameHeight = 400;
 
-    function updateBallPosition() {
+    function updateScore() {
+      scoreElement.textContent = `${leftScore} - ${rightScore}`;
+    }
+
+    function resetBall() {
+      ballPosX = gameWidth / 2;
+      ballPosY = gameHeight / 2;
+      ballDirectionX = (Math.random() > 0.5 ? 3 : -3);
+      ballDirectionY = (Math.random() * 4 - 2); // direction Y aléatoire
+    }
+
+    function updateBall() {
       ballPosX += ballDirectionX;
       ballPosY += ballDirectionY;
 
-      // Verifica colisões com o teto e o chão
+      // Rebond haut / bas
       if (ballPosY <= 0 || ballPosY >= gameHeight - 15) {
         ballDirectionY = -ballDirectionY;
       }
 
-      // Verifica colisão com as raquetes
+      // Collision raquette gauche
       if (
         ballPosX <= 15 &&
-        ballPosY >= paddleLeftPosY &&
-        ballPosY <= paddleLeftPosY + paddleLeftHeight
+        ballPosY + 15 >= paddleLeftPosY &&
+        ballPosY <= paddleLeftPosY + paddleHeight
       ) {
-        ballDirectionX = -ballDirectionX;
+        ballDirectionX = Math.abs(ballDirectionX); // va vers la droite
       }
 
+      // Collision raquette droite
       if (
         ballPosX >= gameWidth - 30 &&
-        ballPosY >= paddleRightPosY &&
-        ballPosY <= paddleRightPosY + paddleRightHeight
+        ballPosY + 15 >= paddleRightPosY &&
+        ballPosY <= paddleRightPosY + paddleHeight
       ) {
-        ballDirectionX = -ballDirectionX;
+        ballDirectionX = -Math.abs(ballDirectionX); // va vers la gauche
       }
 
-      // Verifica se a bola saiu do campo
+      // Point marqué
       if (ballPosX <= 0) {
         rightScore++;
+        updateScore();
         resetBall();
       }
-      if (ballPosX >= gameWidth - 15) {
+      if (ballPosX >= gameWidth) {
         leftScore++;
+        updateScore();
         resetBall();
       }
 
       ball.style.left = `${ballPosX}px`;
-      ball.style.top = `${ballPosY}px`;
+      ball.style.top  = `${ballPosY}px`;
     }
 
-    function movePaddles() {
-      document.addEventListener("keydown", (e) => {
-        // Movimenta a raquete da esquerda
-        if (e.key === "w" && paddleLeftPosY > 0) {
-          paddleLeftPosY -= paddleSpeed;
-        }
-        if (e.key === "s" && paddleLeftPosY < gameHeight - paddleLeftHeight) {
-          paddleLeftPosY += paddleSpeed;
-        }
-
-        // Movimenta a raquete da direita
-        if (e.key === "ArrowUp" && paddleRightPosY > 0) {
-          paddleRightPosY -= paddleSpeed;
-        }
-        if (e.key === "ArrowDown" && paddleRightPosY < gameHeight - paddleRightHeight) {
-          paddleRightPosY += paddleSpeed;
-        }
-
-        paddleLeft.style.top = `${paddleLeftPosY}px`;
-        paddleRight.style.top = `${paddleRightPosY}px`;
-      });
+    function aiPaddle(paddlePosY, targetY) {
+      if (paddlePosY + paddleHeight/2 < targetY) {
+        return Math.min(paddlePosY + paddleSpeed, gameHeight - paddleHeight);
+      } else if (paddlePosY + paddleHeight/2 > targetY) {
+        return Math.max(paddlePosY - paddleSpeed, 0);
+      }
+      return paddlePosY;
     }
 
-    function resetBall() {
-      ballPosX = gameWidth / 2 - 7.5;
-      ballPosY = gameHeight / 2 - 7.5;
-      ballDirectionX = -ballDirectionX;
-      ballDirectionY = 2;
+    function updatePaddles() {
+      // IA Raquette Gauche (suit la balle)
+      paddleLeftPosY = aiPaddle(paddleLeftPosY, ballPosY + 7.5);
+      
+      // IA Raquette Droite (suit la balle)
+      paddleRightPosY = aiPaddle(paddleRightPosY, ballPosY + 7.5);
+
+      paddleLeft.style.top  = `${paddleLeftPosY}px`;
+      paddleRight.style.top = `${paddleRightPosY}px`;
     }
 
     function gameLoop() {
-      updateBallPosition();
-      movePaddles();
+      updateBall();
+      updatePaddles();
       requestAnimationFrame(gameLoop);
     }
 
+    // Initialisation
+    resetBall();
+    updateScore();
     gameLoop();
   </script>
 </body>
 </html>
+   
+   
