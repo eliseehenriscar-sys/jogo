@@ -31,14 +31,16 @@
       height: 100px;
       background-color: white;
     }
-    #paddle-left  { left: 0; }
-    #paddle-right { right: 0; }
+    #paddle-left  { left: 10px; }
+    #paddle-right { right: 10px; }
     #ball {
       position: absolute;
       width: 15px;
       height: 15px;
       background-color: white;
       border-radius: 50%;
+      left: 392.5px;
+      top: 192.5px;
     }
     #score {
       position: absolute;
@@ -47,8 +49,9 @@
       text-align: center;
       color: white;
       font-family: Arial, sans-serif;
-      font-size: 32px;
+      font-size: 42px;
       pointer-events: none;
+      z-index: 10;
     }
   </style>
 </head>
@@ -66,16 +69,16 @@
     const paddleRight = document.getElementById("paddle-right");
     const scoreElement = document.getElementById("score");
 
-    let ballPosX = 400;
-    let ballPosY = 200;
-    let ballDirectionX = 3;
-    let ballDirectionY = 2;
+    let ballPosX = 392.5;
+    let ballPosY = 192.5;
+    let ballDirectionX = 4;
+    let ballDirectionY = 3;
 
     let paddleLeftPosY = 150;
     let paddleRightPosY = 150;
-    const paddleHeight = 100;
-    const paddleSpeed = 4;        // vitesse de l'IA (augmente pour plus de difficulté)
 
+    const paddleHeight = 100;
+    const paddleSpeed = 5;        // Augmente pour IA plus forte
     let leftScore = 0;
     let rightScore = 0;
     const gameWidth = 800;
@@ -86,37 +89,33 @@
     }
 
     function resetBall() {
-      ballPosX = gameWidth / 2;
-      ballPosY = gameHeight / 2;
-      ballDirectionX = (Math.random() > 0.5 ? 3 : -3);
-      ballDirectionY = (Math.random() * 4 - 2); // direction Y aléatoire
+      ballPosX = gameWidth / 2 - 7.5;
+      ballPosY = gameHeight / 2 - 7.5;
+      ballDirectionX = (Math.random() > 0.5 ? 4 : -4);
+      ballDirectionY = (Math.random() * 5 - 2.5);
     }
 
     function updateBall() {
       ballPosX += ballDirectionX;
       ballPosY += ballDirectionY;
 
-      // Rebond haut / bas
+      // Rebond murs haut/bas
       if (ballPosY <= 0 || ballPosY >= gameHeight - 15) {
         ballDirectionY = -ballDirectionY;
       }
 
       // Collision raquette gauche
-      if (
-        ballPosX <= 15 &&
-        ballPosY + 15 >= paddleLeftPosY &&
-        ballPosY <= paddleLeftPosY + paddleHeight
-      ) {
-        ballDirectionX = Math.abs(ballDirectionX); // va vers la droite
+      if (ballPosX <= 25 &&
+          ballPosY + 15 >= paddleLeftPosY &&
+          ballPosY <= paddleLeftPosY + paddleHeight) {
+        ballDirectionX = Math.abs(ballDirectionX) + 0.2; // petit boost
       }
 
       // Collision raquette droite
-      if (
-        ballPosX >= gameWidth - 30 &&
-        ballPosY + 15 >= paddleRightPosY &&
-        ballPosY <= paddleRightPosY + paddleHeight
-      ) {
-        ballDirectionX = -Math.abs(ballDirectionX); // va vers la gauche
+      if (ballPosX >= gameWidth - 35 &&
+          ballPosY + 15 >= paddleRightPosY &&
+          ballPosY <= paddleRightPosY + paddleHeight) {
+        ballDirectionX = -Math.abs(ballDirectionX) - 0.2;
       }
 
       // Point marqué
@@ -135,20 +134,18 @@
       ball.style.top  = `${ballPosY}px`;
     }
 
-    function aiPaddle(paddlePosY, targetY) {
-      if (paddlePosY + paddleHeight/2 < targetY) {
-        return Math.min(paddlePosY + paddleSpeed, gameHeight - paddleHeight);
-      } else if (paddlePosY + paddleHeight/2 > targetY) {
-        return Math.max(paddlePosY - paddleSpeed, 0);
+    function aiPaddle(currentY, targetY) {
+      const center = currentY + paddleHeight / 2;
+      if (center < targetY - 5) {
+        return Math.min(currentY + paddleSpeed, gameHeight - paddleHeight);
+      } else if (center > targetY + 5) {
+        return Math.max(currentY - paddleSpeed, 0);
       }
-      return paddlePosY;
+      return currentY;
     }
 
     function updatePaddles() {
-      // IA Raquette Gauche (suit la balle)
       paddleLeftPosY = aiPaddle(paddleLeftPosY, ballPosY + 7.5);
-      
-      // IA Raquette Droite (suit la balle)
       paddleRightPosY = aiPaddle(paddleRightPosY, ballPosY + 7.5);
 
       paddleLeft.style.top  = `${paddleLeftPosY}px`;
@@ -162,11 +159,11 @@
     }
 
     // Initialisation
-    resetBall();
+    paddleLeft.style.top = `${paddleLeftPosY}px`;
+    paddleRight.style.top = `${paddleRightPosY}px`;
     updateScore();
+    resetBall();
     gameLoop();
   </script>
 </body>
 </html>
-   
-   
