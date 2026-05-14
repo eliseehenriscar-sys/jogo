@@ -1,0 +1,132 @@
+import pygame
+import sys
+import random
+
+# Initialisation
+pygame.init()
+WIDTH, HEIGHT = 800, 600
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Subway Surfers-like")
+clock = pygame.time.Clock()
+
+# Couleurs
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+YELLOW = (255, 255, 0)
+
+# Joueur
+player_size = 50
+player_x = WIDTH // 2 - player_size // 2
+player_y = HEIGHT - 150
+player_vel_y = 0
+gravity = 1
+jump_strength = -20
+is_jumping = False
+is_sliding = False
+
+# Voies (3 voies)
+lanes = [200, 400, 600]
+current_lane = 1  # 0, 1, 2
+
+# Obstacles et pièces
+obstacles = []
+coins = []
+score = 0
+speed = 5
+font = pygame.font.SysFont(None, 36)
+
+def create_obstacle():
+    lane = random.choice(lanes)
+    obstacles.append([lane - 25, -50, 50, 80])  # x, y, w, h
+
+def create_coin():
+    lane = random.choice(lanes)
+    coins.append([lane - 15, -30, 30, 30])
+
+# Boucle principale
+running = True
+while running:
+    screen.fill((50, 50, 70))  # fond nuit
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE and not is_jumping and not is_sliding:
+                player_vel_y = jump_strength
+                is_jumping = True
+            if event.key == pygame.K_DOWN:
+                is_sliding = True
+            if event.key == pygame.K_LEFT and current_lane > 0:
+                current_lane -= 1
+            if event.key == pygame.K_RIGHT and current_lane < 2:
+                current_lane += 1
+
+        if event.type == pygame.KEYUP:
+            if event.key == pygame.K_DOWN:
+                is_sliding = False
+
+    # Physique joueur
+    player_vel_y += gravity
+    player_y += player_vel_y
+
+    if player_y >= HEIGHT - 150:
+        player_y = HEIGHT - 150
+        is_jumping = False
+        player_vel_y = 0
+
+    # Position selon la voie
+    target_x = lanes[current_lane] - player_size // 2
+    player_x += (target_x - player_x) * 0.2
+
+    # Création d'objets
+    if random.randint(1, 30) == 1:
+        create_obstacle()
+    if random.randint(1, 25) == 1:
+        create_coin()
+
+    # Mise à jour obstacles
+    for obs in obstacles[:]:
+        obs[1] += speed
+        if obs[1] > HEIGHT:
+            obstacles.remove(obs)
+        # Collision
+        if (player_x < obs[0] + obs[2] and player_x + player_size > obs[0] and
+            player_y < obs[1] + obs[3] and player_y + player_size > obs[1]):
+            running = False  # Game Over
+
+    # Mise à jour pièces
+    for coin in coins[:]:
+        coin[1] += speed
+        if coin[1] > HEIGHT:
+            coins.remove(coin)
+        # Collision pièce
+        if (player_x < coin[0] + coin[2] and player_x + player_size > coin[0] and
+            player_y < coin[1] + coin[3] and player_y + player_size > coin[1]):
+            coins.remove(coin)
+            score += 10
+
+    # Dessin
+    # Joueur (rectangle pour l'instant)
+    color = (0, 200, 100) if is_sliding else YELLOW
+    pygame.draw.rect(screen, color, (int(player_x), int(player_y), player_size, player_size if not is_sliding else 25))
+
+    # Obstacles
+    for obs in obstacles:
+        pygame.draw.rect(screen, (200, 0, 0), obs)
+
+    # Pièces
+    for coin in coins:
+        pygame.draw.rect(screen, (255, 215, 0), coin)
+
+    # Score
+    score_text = font.render(f"Score: {score}", True, WHITE)
+    screen.blit(score_text, (10, 10))
+
+    pygame.display.flip()
+    clock.tick(60)
+    speed += 0.001  # Augmente progressivement la vitesse
+
+pygame.quit()
+sys.exit()
