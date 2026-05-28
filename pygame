@@ -1,23 +1,274 @@
-// --- CONFIGURATION INITIALE & OMBRES ---
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87CEEB); // Bleu ciel éclatant (Sky Blue)
-scene.fog = new THREE.FogExp2(0x87CEEB, 0.005); // Brume de chaleur au loin
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Bonhomme Shooter - 2 Joueurs</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: #111;
+      overflow: hidden;
+    }
+    canvas { 
+      border: 4px solid #ffcc00; 
+      background: #222; 
+    }
+    #ui {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      color: white;
+      font-family: Arial;
+      font-size: 20px;
+      text-shadow: 2px 2px 4px black;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="1200" height="600"></canvas>
+  
+  <div id="ui">
+    J1 Bleu: <span id="score1">0</span> &nbsp;&nbsp;&nbsp;
+    J2 Vert: <span id="score2">0</span> &nbsp;&nbsp;&nbsp;
+    Vies: <span id="lives">6</span>
+  </div>
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true; // Activer les ombres dans le jeu
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-document.body.appendChild(renderer.domElement);
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
 
-// --- LUMIÈRES DU SOLEIL (ÉCLARTÉ MAXIMALE) ---
-// 1. Lumière ambiante globale (pour éviter les zones toutes noires)
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-scene.add(ambientLight);
+    const player1 = { x: 100, y: 250, width: 30, height: 50, speed: 5, color: "#00aaff", score: 0 };
+    const player2 = { x: 100, y: 400, width: 30, height: 50, speed: 5, color: "#00ff88", score: 0 };
 
-// 2. Le Soleil (Lumière directionnelle forte qui fait des ombres)
-const sunLight = new THREE.DirectionalLight(0xfffaed, 1.2); // Couleur chaude du soleil
-sunLight.position.set(20, 40, 20); // Placé haut dans le ciel
-sunLight.castShadow = true; // Le soleil projette des ombres
+    let bullets = [];
+    let enemyBullets = [];
+    let enemies = [];
+    let warCats = [];
+    let lives = 6;
+    const keys = {};
 
-//
+    window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+    window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+    canvas.addEventListener("click", () => shoot(player1));
+    canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); shoot(player2); });
+
+    function shoot(player) {
+      bullets.push({
+        x: player.x + 40,
+        y: player.y + 25,
+        vx: 13,
+        vy: 0,
+        radius: 6,
+        owner: player === player1 ? 1 : 2
+      });
+    }
+
+    function drawWarCat(x, y) {
+      ctx.fillStyle = "#ff8800";
+      ctx.strokeStyle = "#cc6600";
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(x+15, y+20, 12, 8, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x+22, y+12, 7, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+18, y+7); ctx.lineTo(x+20, y+2); ctx.lineTo(x+24, y+8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+25, y+7); ctx.lineTo(x+27, y+2); ctx.lineTo(x+31, y+8); ctx.stroke();
+    }
+
+    function drawStickman(x, y, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(x+15, y+10); ctx.lineTo(x+15, y+38); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x+15, y+8, 8, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+15, y+22); ctx.lineTo(x+4, y+30); ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.moveTo(x+15, y+22); ctx.lineTo(x+35, y+22); ctx.lineTo(x+45, y+20);
+      ctx.strokeStyle = "#333"; ctx.lineWidth = 6; ctx.stroke();
+      ctx.strokeStyle = color; ctx.lineWidth = 4;
+      
+      ctx.beginPath();
+      ctx.moveTo(x+15, y+38); ctx.lineTo(x+8, y+50);
+      ctx.moveTo(x+15, y+38); ctx.lineTo(x+22, y+50); ctx.stroke();
+    }
+
+    function drawRoad() {
+      // Herbe du haut
+      ctx.fillStyle = "#1e5a1e";
+      ctx.fillRect(0, 0, canvas.width, 180);
+      
+      // Route principale
+      ctx.fillStyle = "#333333";
+      ctx.fillRect(0, 180, canvas.width, 280);
+      
+      // Lignes de la route (effet route)
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 6;
+      for (let i = 0; i < canvas.width; i += 80) {
+        ctx.beginPath();
+        ctx.setLineDash([30, 40]);
+        ctx.moveTo(i, 300);
+        ctx.lineTo(i + 50, 300);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+      // Herbe du bas
+      ctx.fillStyle = "#1e5a1e";
+      ctx.fillRect(0, 460, canvas.width, 140);
+      
+      // Bordures de route
+      ctx.strokeStyle = "#ddd";
+      ctx.lineWidth = 12;
+      ctx.beginPath();
+      ctx.moveTo(0, 180); ctx.lineTo(canvas.width, 180); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, 460); ctx.lineTo(canvas.width, 460); ctx.stroke();
+    }
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Dessiner la route
+      drawRoad();
+
+      // Mouvements
+      if (keys["arrowleft"]) player1.x -= player1.speed;
+      if (keys["arrowright"]) player1.x += player1.speed;
+      if (keys["arrowup"]) player1.y -= player1.speed;
+      if (keys["arrowdown"]) player1.y += player1.speed;
+
+      if (keys["a"]) player2.x -= player2.speed;
+      if (keys["d"]) player2.x += player2.speed;
+      if (keys["w"]) player2.y -= player2.speed;
+      if (keys["z"]) player2.y += player2.speed;
+
+      // Limites
+      [player1, player2].forEach(p => {
+        p.x = Math.max(20, Math.min(1150, p.x));
+        p.y = Math.max(190, Math.min(430, p.y));
+      });
+
+      // Chats de Guerre
+      if (warCats.length === 0) {
+        warCats.push({ x: player1.x + 50, y: player1.y + 20, target: player1 });
+        warCats.push({ x: player2.x + 50, y: player2.y + 20, target: player2 });
+      }
+
+      warCats.forEach(cat => {
+        cat.x = cat.target.x + 45;
+        cat.y = cat.target.y + 15;
+
+        if (Math.random() < 0.045 && enemies.length > 0) {
+          for (let enemy of enemies) {
+            if (enemy.x > cat.x) {
+              const dx = enemy.x - cat.x;
+              const dy = enemy.y + 20 - cat.y;
+              const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+              
+              bullets.push({
+                x: cat.x + 20,
+                y: cat.y + 5,
+                vx: (dx / dist) * 11,
+                vy: (dy / dist) * 11,
+                radius: 4,
+                owner: 3
+              });
+              break;
+            }
+          }
+        }
+        drawWarCat(cat.x, cat.y);
+      });
+
+      drawStickman(player1.x, player1.y, player1.color);
+      drawStickman(player2.x, player2.y, player2.color);
+
+      // Balles
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        let b = bullets[i];
+        b.x += b.vx;
+        b.y += b.vy || 0;
+
+        ctx.fillStyle = b.owner === 3 ? "#00ffff" : "#ffff00";
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2); ctx.fill();
+
+        if (b.x > 1250) bullets.splice(i, 1);
+      }
+
+      // Ennemis
+      if (Math.random() < 0.025) {
+        enemies.push({ 
+          x: 1200, 
+          y: Math.random() * 240 + 220, 
+          speed: 3.8, 
+          shootTimer: 65 
+        });
+      }
+
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        let e = enemies[i];
+        e.x -= e.speed;
+        e.shootTimer--;
+
+        drawStickman(e.x, e.y, "#ff4444");
+
+        if (e.shootTimer <= 0) {
+          const target = player1.x < player2.x ? player1 : player2;
+          if (target.x < e.x) {
+            const dx = (target.x + 15) - (e.x + 25);
+            const dy = (target.y + 25) - (e.y + 25);
+            const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+            enemyBullets.push({ x: e.x + 25, y: e.y + 25, vx: (dx / dist) * 5.5, vy: (dy / dist) * 5.5 });
+            e.shootTimer = 70;
+          }
+        }
+
+        for (let j = bullets.length - 1; j >= 0; j--) {
+          let b = bullets[j];
+          if (b.x > e.x && b.x < e.x + 30 && b.y > e.y && b.y < e.y + 55) {
+            enemies.splice(i, 1);
+            bullets.splice(j, 1);
+            if (b.owner === 1) player1.score += 20;
+            else if (b.owner === 2) player2.score += 20;
+            else player1.score += 15;
+
+            document.getElementById("score1").textContent = player1.score;
+            document.getElementById("score2").textContent = player2.score;
+            break;
+          }
+        }
+
+        [player1, player2].forEach(p => {
+          if (e.x < p.x + 30 && e.x + 30 > p.x && e.y < p.y + 55 && e.y + 55 > p.y) {
+            lives--;
+            document.getElementById("lives").textContent = lives;
+            enemies.splice(i, 1);
+            if (lives <= 0) {
+              alert("Game Over !\nJ1: " + player1.score + " | J2: " + player2.score);
+              location.reload();
+            }
+          }
+        });
+      }
+
+      // Balles ennemis
+      for (let i = enemyBullets.length - 1; i >= 0; i--) {
+        let b = enemyBullets[i];
+        b.x += b.vx; b.y += b.vy;
+        ctx.fillStyle = "#ff00ff";
+        ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, Math.PI*2); ctx.fill();
+        if (b.x < 0 || b.x > 1200 || b.y < 0 || b.y > 600) enemyBullets.splice(i, 1);
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
