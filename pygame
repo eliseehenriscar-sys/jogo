@@ -16,7 +16,6 @@
     }
     canvas { 
       border: 4px solid #ffcc00; 
-      background: #222; 
     }
     #ui {
       position: absolute;
@@ -42,41 +41,126 @@
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
 
-    const player1 = { x: 100, y: 250, width: 30, height: 50, speed: 5, color: "#00aaff", score: 0 };
-    const player2 = { x: 100, y: 400, width: 30, height: 50, speed: 5, color: "#00ff88", score: 0 };
+    const player1 = { x: 200, y: 420, width: 30, height: 50, speed: 7, color: "#00aaff", score: 0 };
+    const player2 = { x: 800, y: 420, width: 30, height: 50, speed: 7, color: "#00ff88", score: 0 };
 
     let bullets = [];
     let enemyBullets = [];
     let enemies = [];
-    let warCats = [];
+    let warTanks = [];
     let lives = 6;
     const keys = {};
 
-    window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
-    window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+    // Audio
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    canvas.addEventListener("click", () => shoot(player1));
-    canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); shoot(player2); });
-
-    function shoot(player) {
-      bullets.push({
-        x: player.x + 40,
-        y: player.y + 25,
-        vx: 13,
-        vy: 0,
-        radius: 6,
-        owner: player === player1 ? 1 : 2
-      });
+    function playShootSound(player) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(player === player1 ? 800 : 600, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.15);
     }
 
-    function drawWarCat(x, y) {
-      ctx.fillStyle = "#ff8800";
-      ctx.strokeStyle = "#cc6600";
+    function playHitSound() {
+      const noise = audioCtx.createBufferSource();
+      const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < buffer.length; i++) data[i] = Math.random() * 2 - 1;
+      noise.buffer = buffer;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'highpass'; filter.frequency.value = 800;
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+      noise.connect(filter).connect(gain).connect(audioCtx.destination);
+      noise.start();
+    }
+
+    function playExplosionSound() {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(60, audioCtx.currentTime + 0.4);
+      gain.gain.setValueAtTime(0.6, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.45);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.45);
+    }
+
+    // ==================== DÉCOR ====================
+    function drawBackground() {
+      // Ciel
+      const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+      gradient.addColorStop(0, "#0a1f4d");
+      gradient.addColorStop(1, "#1e5a9e");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, 600);
+
+      // Soleil
+      ctx.fillStyle = "#ffdd00";
+      ctx.beginPath(); ctx.arc(280, 110, 48, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#ffaa00";
+      ctx.beginPath(); ctx.arc(280, 110, 36, 0, Math.PI * 2); ctx.fill();
+
+      // Étoiles
+      ctx.fillStyle = "#ffffff";
+      [[80,50],[620,35],[1050,80],[420,120],[880,45]].forEach(s => {
+        ctx.beginPath(); ctx.arc(s[0], s[1], 2.8, 0, Math.PI*2); ctx.fill();
+      });
+
+      // Montagnes
+      ctx.fillStyle = "#1e2a1e";
+      ctx.beginPath(); ctx.moveTo(0,450); ctx.lineTo(180,280); ctx.lineTo(420,450); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(300,450); ctx.lineTo(580,220); ctx.lineTo(850,450); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(750,450); ctx.lineTo(980,260); ctx.lineTo(1250,450); ctx.fill();
+
+      // Terre (sol)
+      ctx.fillStyle = "#3a2f1e";
+      ctx.fillRect(0, 450, canvas.width, 150);
+
+      // Herbe
+      ctx.fillStyle = "#1e5a1e";
+      ctx.fillRect(0, 445, canvas.width, 12);
+    }
+
+    function drawWarTank(x, y) {
+      // Chenilles sur la terre
+      ctx.fillStyle = "#222";
+      ctx.fillRect(x + 2, y + 28, 38, 11);
+      ctx.fillStyle = "#111";
+      ctx.fillRect(x + 5, y + 30, 32, 7);
+
+      // Corps
+      ctx.fillStyle = "#2a8f2a";
+      ctx.strokeStyle = "#1e5c1e";
       ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.ellipse(x+15, y+20, 12, 8, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.arc(x+22, y+12, 7, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x+18, y+7); ctx.lineTo(x+20, y+2); ctx.lineTo(x+24, y+8); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x+25, y+7); ctx.lineTo(x+27, y+2); ctx.lineTo(x+31, y+8); ctx.stroke();
+      ctx.fillRect(x + 5, y + 15, 35, 20);
+      ctx.strokeRect(x + 5, y + 15, 35, 20);
+
+      // Tourelle
+      ctx.fillStyle = "#256b25";
+      ctx.fillRect(x + 12, y + 10, 22, 13);
+      ctx.strokeRect(x + 12, y + 10, 22, 13);
+
+      // Canon
+      ctx.strokeStyle = "#1e1e1e";
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(x + 33, y + 16);
+      ctx.lineTo(x + 50, y + 16);
+      ctx.stroke();
+
+      ctx.fillStyle = "#1e1e1e";
+      ctx.beginPath();
+      ctx.arc(x + 23, y + 16, 5, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     function drawStickman(x, y, color) {
@@ -96,93 +180,55 @@
       ctx.moveTo(x+15, y+38); ctx.lineTo(x+22, y+50); ctx.stroke();
     }
 
-    function drawRoad() {
-      // Herbe du haut
-      ctx.fillStyle = "#1e5a1e";
-      ctx.fillRect(0, 0, canvas.width, 180);
-      
-      // Route principale
-      ctx.fillStyle = "#333333";
-      ctx.fillRect(0, 180, canvas.width, 280);
-      
-      // Lignes de la route (effet route)
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 6;
-      for (let i = 0; i < canvas.width; i += 80) {
-        ctx.beginPath();
-        ctx.setLineDash([30, 40]);
-        ctx.moveTo(i, 300);
-        ctx.lineTo(i + 50, 300);
-        ctx.stroke();
-      }
-      ctx.setLineDash([]);
+    // ====================== GAME LOOP ======================
+    window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+    window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-      // Herbe du bas
-      ctx.fillStyle = "#1e5a1e";
-      ctx.fillRect(0, 460, canvas.width, 140);
-      
-      // Bordures de route
-      ctx.strokeStyle = "#ddd";
-      ctx.lineWidth = 12;
-      ctx.beginPath();
-      ctx.moveTo(0, 180); ctx.lineTo(canvas.width, 180); ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, 460); ctx.lineTo(canvas.width, 460); ctx.stroke();
+    canvas.addEventListener("click", () => { shoot(player1); playShootSound(player1); });
+    canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); shoot(player2); playShootSound(player2); });
+
+    function shoot(player) {
+      bullets.push({ x: player.x + 40, y: player.y + 25, vx: 16, vy: 0, radius: 6, owner: player === player1 ? 1 : 2 });
     }
 
     function gameLoop() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Dessiner la route
-      drawRoad();
+      drawBackground();
 
-      // Mouvements
+      // Mouvements seulement gauche / droite (ils peuvent se rencontrer)
       if (keys["arrowleft"]) player1.x -= player1.speed;
       if (keys["arrowright"]) player1.x += player1.speed;
-      if (keys["arrowup"]) player1.y -= player1.speed;
-      if (keys["arrowdown"]) player1.y += player1.speed;
 
       if (keys["a"]) player2.x -= player2.speed;
       if (keys["d"]) player2.x += player2.speed;
-      if (keys["w"]) player2.y -= player2.speed;
-      if (keys["z"]) player2.y += player2.speed;
 
-      // Limites
-      [player1, player2].forEach(p => {
-        p.x = Math.max(20, Math.min(1150, p.x));
-        p.y = Math.max(190, Math.min(430, p.y));
-      });
+      // Limites globales sur la terre
+      player1.x = Math.max(50, Math.min(1050, player1.x));
+      player2.x = Math.max(50, Math.min(1050, player2.x));
 
-      // Chats de Guerre
-      if (warCats.length === 0) {
-        warCats.push({ x: player1.x + 50, y: player1.y + 20, target: player1 });
-        warCats.push({ x: player2.x + 50, y: player2.y + 20, target: player2 });
+      // Chars de guerre bien placés sur la terre
+      if (warTanks.length === 0) {
+        warTanks.push({ x: player1.x + 48, y: player1.y + 8, target: player1 });
+        warTanks.push({ x: player2.x + 48, y: player2.y + 8, target: player2 });
       }
 
-      warCats.forEach(cat => {
-        cat.x = cat.target.x + 45;
-        cat.y = cat.target.y + 15;
+      warTanks.forEach(tank => {
+        tank.x = tank.target.x + 48;
+        tank.y = tank.target.y + 8;
 
         if (Math.random() < 0.045 && enemies.length > 0) {
           for (let enemy of enemies) {
-            if (enemy.x > cat.x) {
-              const dx = enemy.x - cat.x;
-              const dy = enemy.y + 20 - cat.y;
+            if (enemy.x > tank.x) {
+              const dx = enemy.x - tank.x;
+              const dy = enemy.y + 20 - tank.y;
               const dist = Math.sqrt(dx*dx + dy*dy) || 1;
-              
-              bullets.push({
-                x: cat.x + 20,
-                y: cat.y + 5,
-                vx: (dx / dist) * 11,
-                vy: (dy / dist) * 11,
-                radius: 4,
-                owner: 3
-              });
+              bullets.push({ x: tank.x + 48, y: tank.y + 14, vx: (dx / dist) * 13, vy: (dy / dist) * 13, radius: 5, owner: 3 });
               break;
             }
           }
         }
-        drawWarCat(cat.x, cat.y);
+        drawWarTank(tank.x, tank.y);
       });
 
       drawStickman(player1.x, player1.y, player1.color);
@@ -193,21 +239,14 @@
         let b = bullets[i];
         b.x += b.vx;
         b.y += b.vy || 0;
-
-        ctx.fillStyle = b.owner === 3 ? "#00ffff" : "#ffff00";
+        ctx.fillStyle = b.owner === 3 ? "#00ffcc" : "#ffff00";
         ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2); ctx.fill();
-
         if (b.x > 1250) bullets.splice(i, 1);
       }
 
       // Ennemis
-      if (Math.random() < 0.025) {
-        enemies.push({ 
-          x: 1200, 
-          y: Math.random() * 240 + 220, 
-          speed: 3.8, 
-          shootTimer: 65 
-        });
+      if (Math.random() < 0.028) {
+        enemies.push({ x: 1200, y: 420, speed: 4.3, shootTimer: 60 });
       }
 
       for (let i = enemies.length - 1; i >= 0; i--) {
@@ -223,8 +262,8 @@
             const dx = (target.x + 15) - (e.x + 25);
             const dy = (target.y + 25) - (e.y + 25);
             const dist = Math.sqrt(dx*dx + dy*dy) || 1;
-            enemyBullets.push({ x: e.x + 25, y: e.y + 25, vx: (dx / dist) * 5.5, vy: (dy / dist) * 5.5 });
-            e.shootTimer = 70;
+            enemyBullets.push({ x: e.x + 25, y: e.y + 25, vx: (dx / dist) * 5.8, vy: (dy / dist) * 5.8 });
+            e.shootTimer = 65;
           }
         }
 
@@ -233,10 +272,10 @@
           if (b.x > e.x && b.x < e.x + 30 && b.y > e.y && b.y < e.y + 55) {
             enemies.splice(i, 1);
             bullets.splice(j, 1);
+            playExplosionSound();
             if (b.owner === 1) player1.score += 20;
             else if (b.owner === 2) player2.score += 20;
             else player1.score += 15;
-
             document.getElementById("score1").textContent = player1.score;
             document.getElementById("score2").textContent = player2.score;
             break;
@@ -247,6 +286,7 @@
           if (e.x < p.x + 30 && e.x + 30 > p.x && e.y < p.y + 55 && e.y + 55 > p.y) {
             lives--;
             document.getElementById("lives").textContent = lives;
+            playHitSound();
             enemies.splice(i, 1);
             if (lives <= 0) {
               alert("Game Over !\nJ1: " + player1.score + " | J2: " + player2.score);
@@ -256,7 +296,7 @@
         });
       }
 
-      // Balles ennemis
+      // Balles ennemies
       for (let i = enemyBullets.length - 1; i >= 0; i--) {
         let b = enemyBullets[i];
         b.x += b.vx; b.y += b.vy;
