@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Bonhomme Shooter - 2 Joueurs</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: #111;
+      overflow: hidden;
+    }
+    canvas { 
+      border: 4px solid #ffcc00; 
+    }
+    #ui {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      color: white;
+      font-family: Arial;
+      font-size: 20px;
+      text-shadow: 2px 2px 4px black;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="1200" height="600"></canvas>
+  
+  <div id="ui">
+    J1 Bleu: <span id="score1">0</span> &nbsp;&nbsp;&nbsp;
+    J2 Vert: <span id="score2">0</span> &nbsp;&nbsp;&nbsp;
+    Vies: <span id="lives">6</span> &nbsp;&nbsp;&nbsp;
+    Vague: <span id="wave">1</span>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const player1 = { x: 200, y: 420, width: 30, height: 50, speed: 7, color: "#00aaff", score: 0, vy: 0, onGround: true };
+    const player2 = { x: 800, y: 420, width: 30, height: 50, speed: 7, color: "#00ff88", score: 0, vy: 0, onGround: true };
+
+    let bullets = [];
+    let enemyBullets = [];
+    let enemies = [];
+    let warTanks = [];
+    let smokes = [];
+    let lives = 6;
+    let wave = 1;
+    let frameCount = 0;
+
+    const keys = {};
+    const GRAVITY = 0.8;
+    const JUMP_FORCE = -18;
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playShootSound() {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.15);
+    }
+
+    function playHitSound() {
+      const noise = audioCtx.createBufferSource();
+      const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < buffer.length; i++) data[i] = Math.random() * 2 - 1;
+      noise.buffer = buffer;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'highpass'; filter.frequency.value = 800;
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+      noise.connect(filter).connect(gain).connect(audioCtx.destination);
+      noise.start();
+    }
+
+    function playExplosionSound() {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(60, audioCtx.currentTime + 0.4);
+      gain.gain.setValueAtTime(0.6, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.45);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.45);
+    }
+
+    function drawBackground() { /* ... même code ... */ 
+      const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+      gradient.addColorStop(0, "#0a1f4d");
+      gradient.addColorStop(1, "#1e5a9e");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, 600);
+
+      ctx.fillStyle = "#ffdd00"; ctx.beginPath(); ctx.arc(280, 110, 48, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#ffaa00"; ctx.beginPath(); ctx.arc(280, 110, 36, 0, Math.PI * 2); ctx.fill();
+
+      ctx.fillStyle = "#ffffff";
+      [[80,50],[620,35],[1050,80],[420,120],[880,45]].forEach(s => {
+        ctx.beginPath(); ctx.arc(s[0], s[1], 2.8, 0, Math.PI*2); ctx.fill();
+      });
+
+      ctx.fillStyle = "#1e2a1e";
+      ctx.beginPath(); ctx.moveTo(0,450); ctx.lineTo(180,280); ctx.lineTo(420,450); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(300,450); ctx.lineTo(580,220); ctx.lineTo(850,450); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(750,450); ctx.lineTo(980,260); ctx.lineTo(1250,450); ctx.fill();
+
+      ctx.fillStyle = "#3a2f1e"; ctx.fillRect(0, 450, canvas.width, 150);
+      ctx.fillStyle = "#1e5a1e"; ctx.fillRect(0, 445, canvas.width, 12);
+    }
+
+    function drawWarTank(x, y) { /* même code */ 
+      ctx.fillStyle = "#222"; ctx.fillRect(x + 2, y + 28, 38, 11);
+      ctx.fillStyle = "#111"; ctx.fillRect(x + 5, y + 30, 32, 7);
+      ctx.fillStyle = "#2a8f2a"; ctx.strokeStyle = "#1e5c1e"; ctx.lineWidth = 3;
+      ctx.fillRect(x + 5, y + 15, 35, 20); ctx.strokeRect(x + 5, y + 15, 35, 20);
+      ctx.fillStyle = "#256b25"; ctx.fillRect(x + 12, y + 10, 22, 13); ctx.strokeRect(x + 12, y + 10, 22, 13);
+      ctx.strokeStyle = "#1e1e1e"; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.moveTo(x + 33, y + 16); ctx.lineTo(x + 50, y + 16); ctx.stroke();
+      ctx.fillStyle = "#1e1e1e"; ctx.beginPath(); ctx.arc(x + 23, y + 16, 5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function drawStickman(x, y, color) { /* même code */ 
+      ctx.strokeStyle = color; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(x+15, y+10); ctx.lineTo(x+15, y+38); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x+15, y+8, 8, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+15, y+22); ctx.lineTo(x+4, y+30); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+15, y+22); ctx.lineTo(x+35, y+22); ctx.lineTo(x+45, y+20);
+      ctx.strokeStyle = "#333"; ctx.lineWidth = 6; ctx.stroke();
+      ctx.strokeStyle = color; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(x+15, y+38); ctx.lineTo(x+8, y+50);
+      ctx.moveTo(x+15, y+38); ctx.lineTo(x+22, y+50); ctx.stroke();
+    }
+
+    window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+    window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+    canvas.addEventListener("click", () => { shoot(player1); playShootSound(); });
+    canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); shoot(player2); playShootSound(); });
+
+    function shoot(player) {
+      bullets.push({ x: player.x + 40, y: player.y + 25, vx: 16, vy: 0, radius: 6, owner: player === player1 ? 1 : 2 });
+    }
+
+    function updatePlayer(player, leftKey, rightKey, jumpKey) {
+      if (keys[leftKey]) player.x -= player.speed;
+      if (keys[rightKey]) player.x += player.speed;
+      if (keys[jumpKey] && player.onGround) {
+        player.vy = JUMP_FORCE;
+        player.onGround = false;
+      }
+      player.vy += GRAVITY;
+      player.y += player.vy;
+      if (player.y >= 420) { player.y = 420; player.vy = 0; player.onGround = true; }
+      player.x = Math.max(50, Math.min(1050, player.x));
+    }
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBackground();
+
+      updatePlayer(player1, "arrowleft", "arrowright", "arrowup");
+      updatePlayer(player2, "a", "d", "w");
+
+      frameCount++;
+
+      // Augmentation de difficulté toutes les 25 secondes
+      if (frameCount % (60 * 25) === 0) {
+        wave++;
+        document.getElementById("wave").textContent = wave;
+      }
+
+      const difficulty = 1 + (wave - 1) * 0.25; // augmente progressivement
+
+      // Chars de guerre
+      if (warTanks.length === 0) {
+        warTanks.push({ x: 0, y: 0, target: player1, shootTimer: 0 });
+        warTanks.push({ x: 0, y: 0, target: player2, shootTimer: 0 });
+      }
+
+      warTanks.forEach(tank => {
+        tank.x = tank.target.x + 48;
+        tank.y = tank.target.y + 8;
+        tank.shootTimer--;
+
+        if (tank.shootTimer <= 0 && enemies.length > 0) {
+          for (let enemy of enemies) {
+            if (enemy.x > tank.x) {
+              const dx = enemy.x + 15 - (tank.x + 48);
+              const dy = enemy.y + 20 - (tank.y + 14);
+              const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+
+              bullets.push({ x: tank.x + 48, y: tank.y + 14, vx: (dx / dist) * 13, vy: (dy / dist) * 13, radius: 5, owner: 3 });
+
+              // Fumée
+              for (let i = 0; i < 8; i++) {
+                smokes.push({ x: tank.x + 52, y: tank.y + 14, vx: -1.5 + Math.random()*3, vy: -2 - Math.random()*2, life: 35 + Math.random()*20, size: 6 + Math.random()*8 });
+              }
+              tank.shootTimer = 45;
+              playShootSound();
+              break;
+            }
+          }
+        }
+        drawWarTank(tank.x, tank.y);
+      });
+
+      // Mise à jour fumée
+      for (let i = smokes.length - 1; i >= 0; i--) {
+        let s = smokes[i];
+        s.x += s.vx; s.y += s.vy; s.vy -= 0.1; s.life--; s.size *= 0.98;
+        if (s.life <= 0) { smokes.splice(i, 1); continue; }
+        ctx.globalAlpha = s.life / 40;
+        ctx.fillStyle = "#555555";
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      drawStickman(player1.x, player1.y, player1.color);
+      drawStickman(player2.x, player2.y, player2.color);
+
+      // === ENNEMIS PLUS PUISSANTS ===
+      if (Math.random() < 0.028 + (wave * 0.008)) { // spawn plus fréquent
+        enemies.push({ 
+          x: 1200, 
+          y: 420, 
+          speed: 4.3 + wave * 0.7,           // plus rapide
+          shootTimer: Math.max(25, 65 - wave * 4) // tire plus souvent
+        });
+      }
+
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        let e = enemies[i];
+        e.x -= e.speed;
+        e.shootTimer--;
+
+        drawStickman(e.x, e.y, "#ff4444");
+
+        // Ennemi tire plus souvent
+        if (e.shootTimer <= 0) {
+          const target = player1.x < player2.x ? player1 : player2;
+          if (target.x < e.x) {
+            const dx = (target.x + 15) - (e.x + 25);
+            const dy = (target.y + 25) - (e.y + 25);
+            const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+            enemyBullets.push({ x: e.x + 25, y: e.y + 25, vx: (dx / dist) * (5.5 + wave*0.4), vy: (dy / dist) * (5.5 + wave*0.4) });
+            e.shootTimer = Math.max(20, 65 - wave * 5);
+          }
+        }
+
+        // Collisions (même logique)
+        for (let j = bullets.length - 1; j >= 0; j--) {
+          let b = bullets[j];
+          if (b.x > e.x && b.x < e.x + 30 && b.y > e.y && b.y < e.y + 55) {
+            enemies.splice(i, 1);
+            bullets.splice(j, 1);
+            playExplosionSound();
+            if (b.owner === 1) player1.score += 20;
+            else if (b.owner === 2) player2.score += 20;
+            else player1.score += 15;
+            document.getElementById("score1").textContent = player1.score;
+            document.getElementById("score2").textContent = player2.score;
+            break;
+          }
+        }
+
+        [player1, player2].forEach(p => {
+          if (e.x < p.x + 30 && e.x + 30 > p.x && e.y < p.y + 55 && e.y + 55 > p.y) {
+            lives--;
+            document.getElementById("lives").textContent = lives;
+            playHitSound();
+            enemies.splice(i, 1);
+            if (lives <= 0) gameOver();
+          }
+        });
+      }
+
+      // Balles ennemies
+      for (let i = enemyBullets.length - 1; i >= 0; i--) {
+        let b = enemyBullets[i];
+        b.x += b.vx; b.y += b.vy;
+        ctx.fillStyle = "#ff00ff";
+        ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, Math.PI*2); ctx.fill();
+
+        if ((b.x > player1.x && b.x < player1.x + 30 && b.y > player1.y && b.y < player1.y + 55) ||
+            (b.x > player2.x && b.x < player2.x + 30 && b.y > player2.y && b.y < player2.y + 55)) {
+          lives--;
+          document.getElementById("lives").textContent = lives;
+          playHitSound();
+          enemyBullets.splice(i, 1);
+          if (lives <= 0) gameOver();
+        } else if (b.x < 0 || b.x > 1200 || b.y < 0 || b.y > 600) {
+          enemyBullets.splice(i, 1);
+        }
+      }
+
+      // Balles alliées
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        let b = bullets[i];
+        b.x += b.vx; b.y += b.vy || 0;
+        ctx.fillStyle = b.owner === 3 ? "#00ffcc" : "#ffff00";
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2); ctx.fill();
+        if (b.x > 1250) bullets.splice(i, 1);
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function gameOver() {
+      alert("Game Over !\nVague atteinte : " + wave + "\nJ1: " + player1.score + " | J2: " + player2.score);
+      location.reload();
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
