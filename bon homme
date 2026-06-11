@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -15,4 +16,370 @@
     J1 Bleu: <span id="score1">0</span> &nbsp; ❤ <span id="lives1">5</span> &nbsp;&nbsp;&nbsp;
     J2 Vert: <span id="score2">0</span> &nbsp; ❤ <span id="lives2">5</span> &nbsp;&nbsp;&nbsp;
     Vague: <span id="wave">1</span>
-  </di
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const player1 = { x:200, y:420, speed:7, color:"#00aaff", score:0, vy:0, onGround:true, lives:5, alive:true };
+    const player2 = { x:800, y:420, speed:7, color:"#00ff88", score:0, vy:0, onGround:true, lives:5, alive:true };
+
+    let bullets=[], enemyBullets=[], enemies=[], warTanks=[], smokes=[];
+    let wave=1, frameCount=0;
+    let boss=null;
+    let bossSpawnedThisWave=false;
+
+    const keys={};
+    const GRAVITY=0.8, JUMP_FORCE=-18;
+    const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+
+    function playShootSound(){
+      const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();
+      osc.type='sawtooth'; osc.frequency.setValueAtTime(800,audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.3,audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.15);
+      osc.connect(gain).connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime+0.15);
+    }
+    function playHitSound(){
+      const noise=audioCtx.createBufferSource();
+      const buffer=audioCtx.createBuffer(1,audioCtx.sampleRate*0.1,audioCtx.sampleRate);
+      const data=buffer.getChannelData(0);
+      for(let i=0;i<buffer.length;i++) data[i]=Math.random()*2-1;
+      noise.buffer=buffer;
+      const filter=audioCtx.createBiquadFilter(); filter.type='highpass'; filter.frequency.value=800;
+      const gain=audioCtx.createGain();
+      gain.gain.setValueAtTime(0.4,audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.2);
+      noise.connect(filter).connect(gain).connect(audioCtx.destination); noise.start();
+    }
+    function playExplosionSound(){
+      const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();
+      osc.type='triangle'; osc.frequency.setValueAtTime(180,audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(60,audioCtx.currentTime+0.4);
+      gain.gain.setValueAtTime(0.6,audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.45);
+      osc.connect(gain).connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime+0.45);
+    }
+    function playBossHitSound(){
+      const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();
+      osc.type='square'; osc.frequency.setValueAtTime(300,audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(100,audioCtx.currentTime+0.3);
+      gain.gain.setValueAtTime(0.5,audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.3);
+      osc.connect(gain).connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime+0.3);
+    }
+
+    function hitPlayer(player, uiId){
+      if(!player.alive) return;
+      player.lives--;
+      document.getElementById(uiId).textContent=player.lives;
+      playHitSound();
+      if(player.lives<=0){ player.alive=false; if(!player1.alive&&!player2.alive) gameOver(); }
+    }
+
+    function isBossWave(w){ return w>=2 && w%2===0; }
+
+    function spawnBoss(){
+      const bossLives=8+Math.floor((wave-2)/2)*3;
+      boss={
+        x:1200, y:390, width:60, height:80,
+        speed:2+wave*0.3,
+        lives:bossLives, maxLives:bossLives,
+        shootTimer:60,
+        phase:0,
+        vy:0, onGround:true,
+        color:"#ff6600", eyeAnim:0
+      };
+      bossSpawnedThisWave=true;
+    }
+
+    function drawBoss(b){
+      const x=b.x, y=b.y;
+      b.eyeAnim=(b.eyeAnim+0.12)%(Math.PI*2);
+      ctx.strokeStyle=b.color; ctx.lineWidth=7;
+      ctx.beginPath(); ctx.moveTo(x+30,y+20); ctx.lineTo(x+30,y+58); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x+30,y+14,14,0,Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+30,y+32); ctx.lineTo(x+8,y+44); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+30,y+32); ctx.lineTo(x+52,y+32); ctx.lineTo(x+72,y+28);
+      ctx.strokeStyle="#111"; ctx.lineWidth=9; ctx.stroke();
+      ctx.strokeStyle=b.color; ctx.lineWidth=7;
+      ctx.beginPath(); ctx.moveTo(x+30,y+58); ctx.lineTo(x+18,y+78);
+      ctx.moveTo(x+30,y+58); ctx.lineTo(x+42,y+78); ctx.stroke();
+      const eyeGlow=Math.sin(b.eyeAnim)*0.5+0.5;
+      ctx.fillStyle=`rgba(255,${Math.floor(eyeGlow*80)},0,1)`;
+      ctx.beginPath(); ctx.arc(x+24,y+12,4,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x+36,y+12,4,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="#ffdd00"; ctx.strokeStyle="#cc9900"; ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.moveTo(x+14,y-4); ctx.lineTo(x+14,y-18); ctx.lineTo(x+22,y-10);
+      ctx.lineTo(x+30,y-22); ctx.lineTo(x+38,y-10); ctx.lineTo(x+46,y-18); ctx.lineTo(x+46,y-4);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      const barW=120, barH=10;
+      const barX=x+30-barW/2, barY=y-36;
+      const ratio=b.lives/b.maxLives;
+      ctx.fillStyle="#333"; ctx.fillRect(barX-1,barY-1,barW+2,barH+2);
+      ctx.fillStyle=ratio>0.5?"#ff6600":ratio>0.25?"#ffaa00":"#ff0000";
+      ctx.fillRect(barX,barY,barW*ratio,barH);
+      ctx.strokeStyle="#ffdd00"; ctx.lineWidth=1.5; ctx.strokeRect(barX-1,barY-1,barW+2,barH+2);
+      ctx.fillStyle="#fff"; ctx.font="bold 12px Arial"; ctx.textAlign="center";
+      ctx.fillText("★ "+b.lives+" / "+b.maxLives,x+30,barY-4);
+      ctx.textAlign="left";
+    }
+
+    function updateBoss(){
+      if(!boss) return;
+      const b=boss;
+      if(b.phase===0){ b.x-=b.speed; if(b.x<500) b.phase=1; }
+      else { b.x+=b.speed*0.5; if(b.x>900) b.phase=0; }
+      if(b.onGround&&Math.random()<0.008){ b.vy=JUMP_FORCE*0.9; b.onGround=false; }
+      b.vy+=GRAVITY; b.y+=b.vy;
+      if(b.y>=390){ b.y=390; b.vy=0; b.onGround=true; }
+      b.shootTimer--;
+      if(b.shootTimer<=0){
+        [player1,player2].forEach(target=>{
+          if(!target.alive) return;
+          const dx=(target.x+15)-(b.x+72), dy=(target.y+25)-(b.y+30);
+          const dist=Math.sqrt(dx*dx+dy*dy)||1;
+          const spd=6+wave*0.4;
+          enemyBullets.push({x:b.x+72,y:b.y+30,vx:(dx/dist)*spd,vy:(dy/dist)*spd,isBoss:true});
+        });
+        b.shootTimer=Math.max(30,70-wave*5);
+        playShootSound();
+      }
+      [player1,player2].forEach((p,idx)=>{
+        if(!p.alive) return;
+        if(b.x<p.x+30&&b.x+60>p.x&&b.y<p.y+55&&b.y+80>p.y)
+          hitPlayer(p,idx===0?"lives1":"lives2");
+      });
+      for(let j=bullets.length-1;j>=0;j--){
+        const bl=bullets[j];
+        if(bl.x>b.x&&bl.x<b.x+60&&bl.y>b.y&&bl.y<b.y+80){
+          b.lives--;
+          bullets.splice(j,1);
+          playBossHitSound();
+          if(b.lives<=0){
+            const bonus=150+wave*30;
+            player1.score+=bonus; player2.score+=bonus;
+            document.getElementById("score1").textContent=player1.score;
+            document.getElementById("score2").textContent=player2.score;
+            playExplosionSound();
+            boss=null;
+          }
+          break;
+        }
+      }
+      if(boss) drawBoss(boss);
+    }
+
+    function drawBackground(){
+      const gradient=ctx.createLinearGradient(0,0,0,400);
+      gradient.addColorStop(0,"#0a1f4d"); gradient.addColorStop(1,"#1e5a9e");
+      ctx.fillStyle=gradient; ctx.fillRect(0,0,canvas.width,600);
+      ctx.fillStyle="#ffdd00"; ctx.beginPath(); ctx.arc(280,110,48,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="#ffaa00"; ctx.beginPath(); ctx.arc(280,110,36,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="#ffffff";
+      [[80,50],[620,35],[1050,80],[420,120],[880,45]].forEach(s=>{
+        ctx.beginPath(); ctx.arc(s[0],s[1],2.8,0,Math.PI*2); ctx.fill();
+      });
+      ctx.fillStyle="#1e2a1e";
+      ctx.beginPath(); ctx.moveTo(0,450); ctx.lineTo(180,280); ctx.lineTo(420,450); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(300,450); ctx.lineTo(580,220); ctx.lineTo(850,450); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(750,450); ctx.lineTo(980,260); ctx.lineTo(1250,450); ctx.fill();
+      ctx.fillStyle="#3a2f1e"; ctx.fillRect(0,450,canvas.width,150);
+      ctx.fillStyle="#1e5a1e"; ctx.fillRect(0,445,canvas.width,12);
+    }
+
+    function drawWarTank(x,y){
+      ctx.fillStyle="#222"; ctx.fillRect(x+2,y+28,38,11);
+      ctx.fillStyle="#111"; ctx.fillRect(x+5,y+30,32,7);
+      ctx.fillStyle="#2a8f2a"; ctx.strokeStyle="#1e5c1e"; ctx.lineWidth=3;
+      ctx.fillRect(x+5,y+15,35,20); ctx.strokeRect(x+5,y+15,35,20);
+      ctx.fillStyle="#256b25"; ctx.fillRect(x+12,y+10,22,13); ctx.strokeRect(x+12,y+10,22,13);
+      ctx.strokeStyle="#1e1e1e"; ctx.lineWidth=6;
+      ctx.beginPath(); ctx.moveTo(x+33,y+16); ctx.lineTo(x+50,y+16); ctx.stroke();
+      ctx.fillStyle="#1e1e1e"; ctx.beginPath(); ctx.arc(x+23,y+16,5,0,Math.PI*2); ctx.fill();
+    }
+
+    function drawStickman(x,y,color){
+      ctx.strokeStyle=color; ctx.lineWidth=4;
+      ctx.beginPath(); ctx.moveTo(x+15,y+10); ctx.lineTo(x+15,y+38); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x+15,y+8,8,0,Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+15,y+22); ctx.lineTo(x+4,y+30); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+15,y+22); ctx.lineTo(x+35,y+22); ctx.lineTo(x+45,y+20);
+      ctx.strokeStyle="#333"; ctx.lineWidth=6; ctx.stroke();
+      ctx.strokeStyle=color; ctx.lineWidth=4;
+      ctx.beginPath(); ctx.moveTo(x+15,y+38); ctx.lineTo(x+8,y+50);
+      ctx.moveTo(x+15,y+38); ctx.lineTo(x+22,y+50); ctx.stroke();
+    }
+
+    function drawDeadStickman(x,y,color){
+      ctx.globalAlpha=0.4; drawStickman(x,y,color); ctx.globalAlpha=1;
+      ctx.strokeStyle="#ff0000"; ctx.lineWidth=4;
+      ctx.beginPath(); ctx.moveTo(x+5,y+5); ctx.lineTo(x+35,y+55); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+35,y+5); ctx.lineTo(x+5,y+55); ctx.stroke();
+    }
+
+    window.addEventListener("keydown",e=>keys[e.key.toLowerCase()]=true);
+    window.addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
+    canvas.addEventListener("click",()=>{ if(player1.alive){ shoot(player1); playShootSound(); }});
+    canvas.addEventListener("contextmenu",e=>{ e.preventDefault(); if(player2.alive){ shoot(player2); playShootSound(); }});
+
+    function shoot(player){
+      bullets.push({x:player.x+40,y:player.y+25,vx:16,vy:0,radius:6,owner:player===player1?1:2});
+    }
+
+    function updatePlayer(player,leftKey,rightKey,jumpKey){
+      if(!player.alive) return;
+      if(keys[leftKey]) player.x-=player.speed;
+      if(keys[rightKey]) player.x+=player.speed;
+      if(keys[jumpKey]&&player.onGround){ player.vy=JUMP_FORCE; player.onGround=false; }
+      player.vy+=GRAVITY; player.y+=player.vy;
+      if(player.y>=420){ player.y=420; player.vy=0; player.onGround=true; }
+      player.x=Math.max(50,Math.min(1050,player.x));
+    }
+
+    function gameLoop(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      drawBackground();
+
+      updatePlayer(player1,"arrowleft","arrowright","arrowup");
+      updatePlayer(player2,"a","d","w");
+
+      frameCount++;
+      if(frameCount%(60*25)===0){
+        wave++;
+        document.getElementById("wave").textContent=wave;
+        bossSpawnedThisWave=false;
+      }
+
+      if(isBossWave(wave)&&!bossSpawnedThisWave&&!boss) spawnBoss();
+
+      if(warTanks.length===0){
+        warTanks.push({x:0,y:0,shootTimer:0,ownerIdx:0});
+        warTanks.push({x:0,y:0,shootTimer:0,ownerIdx:1});
+      }
+      warTanks.forEach(tank=>{
+        const owner=tank.ownerIdx===0?player1:player2;
+        if(!owner.alive) return;
+        tank.x=owner.x+48; tank.y=owner.y+8; tank.shootTimer--;
+        if(tank.shootTimer<=0&&enemies.length>0){
+          for(let enemy of enemies){
+            if(enemy.x>tank.x){
+              const dx=enemy.x+15-(tank.x+48), dy=enemy.y+20-(tank.y+14);
+              const dist=Math.sqrt(dx*dx+dy*dy)||1;
+              bullets.push({x:tank.x+48,y:tank.y+14,vx:(dx/dist)*13,vy:(dy/dist)*13,radius:5,owner:3});
+              for(let i=0;i<8;i++)
+                smokes.push({x:tank.x+52,y:tank.y+14,vx:-1.5+Math.random()*3,vy:-2-Math.random()*2,life:35+Math.random()*20,size:6+Math.random()*8});
+              tank.shootTimer=45; playShootSound(); break;
+            }
+          }
+        }
+        drawWarTank(tank.x,tank.y);
+      });
+
+      for(let i=smokes.length-1;i>=0;i--){
+        let s=smokes[i];
+        s.x+=s.vx; s.y+=s.vy; s.vy-=0.1; s.life--; s.size*=0.98;
+        if(s.life<=0){ smokes.splice(i,1); continue; }
+        ctx.globalAlpha=s.life/40; ctx.fillStyle="#555";
+        ctx.beginPath(); ctx.arc(s.x,s.y,s.size,0,Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha=1;
+
+      if(player1.alive) drawStickman(player1.x,player1.y,player1.color);
+      else drawDeadStickman(player1.x,player1.y,player1.color);
+      if(player2.alive) drawStickman(player2.x,player2.y,player2.color);
+      else drawDeadStickman(player2.x,player2.y,player2.color);
+
+      updateBoss();
+
+      if(Math.random()<0.028+wave*0.008){
+        enemies.push({x:1200,y:420,speed:4.3+wave*0.7,shootTimer:Math.max(25,65-wave*4)});
+      }
+
+      for(let i=enemies.length-1;i>=0;i--){
+        let e=enemies[i];
+        e.x-=e.speed; e.shootTimer--;
+        drawStickman(e.x,e.y,"#ff4444");
+        if(e.shootTimer<=0){
+          let target=null;
+          if(player1.alive&&player2.alive) target=player1.x<player2.x?player1:player2;
+          else if(player1.alive) target=player1;
+          else if(player2.alive) target=player2;
+          if(target&&target.x<e.x){
+            const dx=(target.x+15)-(e.x+25), dy=(target.y+25)-(e.y+25);
+            const dist=Math.sqrt(dx*dx+dy*dy)||1;
+            enemyBullets.push({x:e.x+25,y:e.y+25,vx:(dx/dist)*(5.5+wave*0.4),vy:(dy/dist)*(5.5+wave*0.4)});
+            e.shootTimer=Math.max(20,65-wave*5);
+          }
+        }
+        let killed=false;
+        for(let j=bullets.length-1;j>=0;j--){
+          let b=bullets[j];
+          if(b.x>e.x&&b.x<e.x+30&&b.y>e.y&&b.y<e.y+55){
+            enemies.splice(i,1); bullets.splice(j,1); playExplosionSound();
+            if(b.owner===1) player1.score+=20;
+            else if(b.owner===2) player2.score+=20;
+            else player1.score+=15;
+            document.getElementById("score1").textContent=player1.score;
+            document.getElementById("score2").textContent=player2.score;
+            killed=true; break;
+          }
+        }
+        if(killed) continue;
+        let removed=false;
+        for(let pi=0;pi<2;pi++){
+          const p=pi===0?player1:player2;
+          const uiId=pi===0?"lives1":"lives2";
+          if(!p.alive) continue;
+          if(e.x<p.x+30&&e.x+30>p.x&&e.y<p.y+55&&e.y+55>p.y){
+            hitPlayer(p,uiId);
+            if(!removed){ enemies.splice(i,1); removed=true; }
+          }
+        }
+      }
+
+      for(let i=enemyBullets.length-1;i>=0;i--){
+        let b=enemyBullets[i];
+        b.x+=b.vx; b.y+=b.vy;
+        ctx.fillStyle=b.isBoss?"#ff6600":"#ff00ff";
+        ctx.beginPath(); ctx.arc(b.x,b.y,b.isBoss?7:5,0,Math.PI*2); ctx.fill();
+        let hit=false;
+        if(player1.alive&&b.x>player1.x&&b.x<player1.x+30&&b.y>player1.y&&b.y<player1.y+55){
+          hitPlayer(player1,"lives1"); enemyBullets.splice(i,1); hit=true;
+        }
+        if(!hit&&player2.alive&&b.x>player2.x&&b.x<player2.x+30&&b.y>player2.y&&b.y<player2.y+55){
+          hitPlayer(player2,"lives2"); enemyBullets.splice(i,1); hit=true;
+        }
+        if(!hit&&(b.x<0||b.x>1200||b.y<0||b.y>600)) enemyBullets.splice(i,1);
+      }
+
+      for(let i=bullets.length-1;i>=0;i--){
+        let b=bullets[i];
+        b.x+=b.vx; b.y+=b.vy||0;
+        ctx.fillStyle=b.owner===3?"#00ffcc":"#ffff00";
+        ctx.beginPath(); ctx.arc(b.x,b.y,b.radius,0,Math.PI*2); ctx.fill();
+        if(b.x>1250) bullets.splice(i,1);
+      }
+
+      if(boss){
+        ctx.fillStyle="rgba(255,100,0,0.08)";
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle="#ff6600"; ctx.font="bold 16px Arial"; ctx.textAlign="center";
+        ctx.fillText("⚠ MASTER EN JEU ⚠  ❤ "+boss.lives+" / "+boss.maxLives, canvas.width/2, 580);
+        ctx.textAlign="left";
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function gameOver(){
+      alert("Game Over !\nVague atteinte : "+wave+"\nJ1: "+player1.score+" | J2: "+player2.score);
+      location.reload();
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
