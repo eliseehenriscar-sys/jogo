@@ -2,310 +2,253 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Bonhomme Shooter - 2 Joueurs</title>
+  <title>Bonhomme Shooter - Mode Chill</title>
   <style>
-    body {
-      margin: 0;
-      padding: 0;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      background: #111;
-      overflow: hidden;
-    }
-    canvas { 
-      border: 4px solid #ffcc00; 
-    }
-    #ui {
-      position: absolute;
-      top: 15px;
-      left: 15px;
-      color: white;
-      font-family: Arial;
-      font-size: 20px;
-      text-shadow: 2px 2px 4px black;
-    }
+    body { margin:0; padding:0; display:flex; justify-content:center; align-items:center; height:100vh; background:#111; overflow:hidden; }
+    canvas { border:4px solid #ffcc00; }
+    #ui { position:absolute; top:15px; left:15px; color:white; font-family:Arial; font-size:20px; text-shadow:2px 2px 4px black; z-index:10; }
   </style>
 </head>
 <body>
   <canvas id="gameCanvas" width="1200" height="600"></canvas>
-  
   <div id="ui">
-    J1 Bleu: <span id="score1">0</span> &nbsp;&nbsp;&nbsp;
-    J2 Vert: <span id="score2">0</span> &nbsp;&nbsp;&nbsp;
-    Vies: <span id="lives">6</span>
+    J1 Bleu: <span id="score1">0</span> &nbsp; ❤ <span id="lives1">5</span> &nbsp;&nbsp;&nbsp;
+    J2 Vert: <span id="score2">0</span> &nbsp; ❤ <span id="lives2">5</span> &nbsp;&nbsp;&nbsp;
+    Vague: <span id="wave">1</span>
   </div>
 
   <script>
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
 
-    const player1 = { x: 200, y: 420, width: 30, height: 50, speed: 7, color: "#00aaff", score: 0 };
-    const player2 = { x: 800, y: 420, width: 30, height: 50, speed: 7, color: "#00ff88", score: 0 };
+    const player1 = { x:300, y:420, speed:7, color:"#00aaff", score:0, vy:0, onGround:true, lives:5, alive:true };
+    const player2 = { x:400, y:420, speed:7, color:"#00ff88", score:0, vy:0, onGround:true, lives:5, alive:true };
 
-    let bullets = [];
-    let enemyBullets = [];
-    let enemies = [];
-    let warTanks = [];
-    let lives = 6;
+    let bullets = [], enemyBullets = [], enemies = [];
+    let wave = 1, frameCount = 0;
+    let cameraX = 0;
+
     const keys = {};
-
-    // Audio
+    const GRAVITY = 0.8, JUMP_FORCE = -18;
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    function playShootSound(player) {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(player === player1 ? 800 : 600, audioCtx.currentTime);
+    function playShootSound() {
+      const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+      osc.type = 'sawtooth'; osc.frequency.setValueAtTime(800, audioCtx.currentTime);
       gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
-      osc.connect(gain).connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.15);
+      osc.connect(gain).connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+    }
+    function playHitSound() {}
+    function playExplosionSound() {}
+
+    function hitPlayer(player, uiId) {
+      if (!player.alive) return;
+      player.lives--;
+      document.getElementById(uiId).textContent = player.lives;
+      playHitSound();
+      if (player.lives <= 0) {
+        player.alive = false;
+        if (!player1.alive && !player2.alive) gameOver();
+      }
     }
 
-    function playHitSound() {
-      const noise = audioCtx.createBufferSource();
-      const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < buffer.length; i++) data[i] = Math.random() * 2 - 1;
-      noise.buffer = buffer;
-      const filter = audioCtx.createBiquadFilter();
-      filter.type = 'highpass'; filter.frequency.value = 800;
-      const gain = audioCtx.createGain();
-      gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
-      noise.connect(filter).connect(gain).connect(audioCtx.destination);
-      noise.start();
-    }
-
-    function playExplosionSound() {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(180, audioCtx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(60, audioCtx.currentTime + 0.4);
-      gain.gain.setValueAtTime(0.6, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.45);
-      osc.connect(gain).connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.45);
-    }
-
-    // ==================== DÉCOR ====================
-    function drawBackground() {
-      // Ciel
-      const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-      gradient.addColorStop(0, "#0a1f4d");
-      gradient.addColorStop(1, "#1e5a9e");
+    function drawBackground(camX) {
+      const gradient = ctx.createLinearGradient(0, 0, 0, 450);
+      gradient.addColorStop(0, "#0a1428"); 
+      gradient.addColorStop(1, "#1e3a6e");
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, canvas.width, 600);
 
-      // Soleil
-      ctx.fillStyle = "#ffdd00";
-      ctx.beginPath(); ctx.arc(280, 110, 48, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#ffaa00";
-      ctx.beginPath(); ctx.arc(280, 110, 36, 0, Math.PI * 2); ctx.fill();
-
       // Étoiles
       ctx.fillStyle = "#ffffff";
-      [[80,50],[620,35],[1050,80],[420,120],[880,45]].forEach(s => {
-        ctx.beginPath(); ctx.arc(s[0], s[1], 2.8, 0, Math.PI*2); ctx.fill();
-      });
+      for (let i = 0; i < 70; i++) {
+        const x = (i * 83 + camX * 0.1) % (canvas.width + 100) - 50;
+        const y = 35 + (i % 18) * 26;
+        ctx.globalAlpha = 0.7 + Math.sin(frameCount/25 + i) * 0.3;
+        ctx.fillRect(x, y, 1.8, 1.8);
+      }
+      ctx.globalAlpha = 1;
+
+      // Soleil
+      const sunX = 320 - camX * 0.08;
+      ctx.fillStyle = "#ffdd00"; ctx.beginPath(); ctx.arc(sunX, 120, 48, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#ffaa00"; ctx.beginPath(); ctx.arc(sunX, 120, 35, 0, Math.PI*2); ctx.fill();
 
       // Montagnes
-      ctx.fillStyle = "#1e2a1e";
-      ctx.beginPath(); ctx.moveTo(0,450); ctx.lineTo(180,280); ctx.lineTo(420,450); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(300,450); ctx.lineTo(580,220); ctx.lineTo(850,450); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(750,450); ctx.lineTo(980,260); ctx.lineTo(1250,450); ctx.fill();
+      ctx.fillStyle = "#1e2a4a";
+      ctx.beginPath(); ctx.moveTo(-300 - camX*0.4, 450); ctx.lineTo(350 - camX*0.4, 210); ctx.lineTo(950 - camX*0.4, 450); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(600 - camX*0.4, 450); ctx.lineTo(1350 - camX*0.4, 190); ctx.lineTo(1900 - camX*0.4, 450); ctx.fill();
 
-      // Terre (sol)
-      ctx.fillStyle = "#3a2f1e";
-      ctx.fillRect(0, 450, canvas.width, 150);
+      // Sol
+      ctx.fillStyle = "#3a2f1e"; ctx.fillRect(0, 450, canvas.width, 150);
+      ctx.fillStyle = "#1e5a1e"; ctx.fillRect(0, 445, canvas.width, 12);
 
-      // Herbe
-      ctx.fillStyle = "#1e5a1e";
-      ctx.fillRect(0, 445, canvas.width, 12);
-    }
-
-    function drawWarTank(x, y) {
-      // Chenilles sur la terre
-      ctx.fillStyle = "#222";
-      ctx.fillRect(x + 2, y + 28, 38, 11);
-      ctx.fillStyle = "#111";
-      ctx.fillRect(x + 5, y + 30, 32, 7);
-
-      // Corps
-      ctx.fillStyle = "#2a8f2a";
-      ctx.strokeStyle = "#1e5c1e";
-      ctx.lineWidth = 3;
-      ctx.fillRect(x + 5, y + 15, 35, 20);
-      ctx.strokeRect(x + 5, y + 15, 35, 20);
-
-      // Tourelle
-      ctx.fillStyle = "#256b25";
-      ctx.fillRect(x + 12, y + 10, 22, 13);
-      ctx.strokeRect(x + 12, y + 10, 22, 13);
-
-      // Canon
-      ctx.strokeStyle = "#1e1e1e";
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.moveTo(x + 33, y + 16);
-      ctx.lineTo(x + 50, y + 16);
-      ctx.stroke();
-
-      ctx.fillStyle = "#1e1e1e";
-      ctx.beginPath();
-      ctx.arc(x + 23, y + 16, 5, 0, Math.PI * 2);
-      ctx.fill();
+      // Lignes route
+      ctx.strokeStyle = "#ffcc00"; ctx.lineWidth = 6;
+      for (let i = -2; i < 15; i++) {
+        const x = (i * 120 - (camX * 0.7) % 120);
+        ctx.beginPath(); ctx.moveTo(x, 520); ctx.lineTo(x + 65, 520); ctx.stroke();
+      }
     }
 
     function drawStickman(x, y, color) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.moveTo(x+15, y+10); ctx.lineTo(x+15, y+38); ctx.stroke();
-      ctx.beginPath(); ctx.arc(x+15, y+8, 8, 0, Math.PI*2); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x+15, y+22); ctx.lineTo(x+4, y+30); ctx.stroke();
-      
-      ctx.beginPath();
-      ctx.moveTo(x+15, y+22); ctx.lineTo(x+35, y+22); ctx.lineTo(x+45, y+20);
+      ctx.strokeStyle = color; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(x+15,y+10); ctx.lineTo(x+15,y+38); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x+15,y+8,8,0,Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+15,y+22); ctx.lineTo(x+4,y+30); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+15,y+22); ctx.lineTo(x+35,y+22); ctx.lineTo(x+45,y+20); ctx.stroke();
       ctx.strokeStyle = "#333"; ctx.lineWidth = 6; ctx.stroke();
       ctx.strokeStyle = color; ctx.lineWidth = 4;
-      
-      ctx.beginPath();
-      ctx.moveTo(x+15, y+38); ctx.lineTo(x+8, y+50);
-      ctx.moveTo(x+15, y+38); ctx.lineTo(x+22, y+50); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+15,y+38); ctx.lineTo(x+8,y+50);
+      ctx.moveTo(x+15,y+38); ctx.lineTo(x+22,y+50); ctx.stroke();
     }
 
-    // ====================== GAME LOOP ======================
+    function drawDeadStickman(x, y, color) {
+      ctx.globalAlpha = 0.4; drawStickman(x, y, color); ctx.globalAlpha = 1;
+      ctx.strokeStyle = "#ff0000"; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(x+5,y+5); ctx.lineTo(x+35,y+55); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+35,y+5); ctx.lineTo(x+5,y+55); ctx.stroke();
+    }
+
     window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
     window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
-
-    canvas.addEventListener("click", () => { shoot(player1); playShootSound(player1); });
-    canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); shoot(player2); playShootSound(player2); });
+    canvas.addEventListener("click", () => { if (player1.alive){ shoot(player1); playShootSound(); }});
+    canvas.addEventListener("contextmenu", e => { e.preventDefault(); if (player2.alive){ shoot(player2); playShootSound(); }});
 
     function shoot(player) {
-      bullets.push({ x: player.x + 40, y: player.y + 25, vx: 16, vy: 0, radius: 6, owner: player === player1 ? 1 : 2 });
+      bullets.push({x: player.x + 40, y: player.y + 25, vx: 17, vy: 0, radius: 6, owner: player === player1 ? 1 : 2});
+    }
+
+    function updatePlayer(player, left, right, jump) {
+      if (!player.alive) return;
+      if (keys[left]) player.x -= player.speed;
+      if (keys[right]) player.x += player.speed;
+      if (keys[jump] && player.onGround) { player.vy = JUMP_FORCE; player.onGround = false; }
+      player.vy += GRAVITY; player.y += player.vy;
+      if (player.y >= 420) { player.y = 420; player.vy = 0; player.onGround = true; }
+      player.x = Math.max(100, player.x);
+    }
+
+    function updateCamera() {
+      const alive = [];
+      if (player1.alive) alive.push(player1.x);
+      if (player2.alive) alive.push(player2.x);
+      if (alive.length === 0) return;
+      const avg = alive.reduce((a,b)=>a+b)/alive.length;
+      cameraX = Math.max(0, avg - 480);
+    }
+
+    function spawnEnemy() {
+      const spawnX = cameraX + 1200 + Math.random() * 400;
+      enemies.push({
+        x: spawnX,
+        y: 420,
+        shootTimer: 80 + Math.random() * 60,   // très lent
+        alive: true
+      });
     }
 
     function gameLoop() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      drawBackground();
 
-      // Mouvements seulement gauche / droite (ils peuvent se rencontrer)
-      if (keys["arrowleft"]) player1.x -= player1.speed;
-      if (keys["arrowright"]) player1.x += player1.speed;
+      updatePlayer(player1, "arrowleft", "arrowright", "arrowup");
+      updatePlayer(player2, "a", "d", "w");
+      updateCamera();
 
-      if (keys["a"]) player2.x -= player2.speed;
-      if (keys["d"]) player2.x += player2.speed;
+      frameCount++;
 
-      // Limites globales sur la terre
-      player1.x = Math.max(50, Math.min(1050, player1.x));
-      player2.x = Math.max(50, Math.min(1050, player2.x));
-
-      // Chars de guerre bien placés sur la terre
-      if (warTanks.length === 0) {
-        warTanks.push({ x: player1.x + 48, y: player1.y + 8, target: player1 });
-        warTanks.push({ x: player2.x + 48, y: player2.y + 8, target: player2 });
+      if (frameCount % (60 * 35) === 0) {
+        wave++;
+        document.getElementById("wave").textContent = wave;
       }
 
-      warTanks.forEach(tank => {
-        tank.x = tank.target.x + 48;
-        tank.y = tank.target.y + 8;
+      drawBackground(cameraX);
 
-        if (Math.random() < 0.045 && enemies.length > 0) {
-          for (let enemy of enemies) {
-            if (enemy.x > tank.x) {
-              const dx = enemy.x - tank.x;
-              const dy = enemy.y + 20 - tank.y;
-              const dist = Math.sqrt(dx*dx + dy*dy) || 1;
-              bullets.push({ x: tank.x + 48, y: tank.y + 14, vx: (dx / dist) * 13, vy: (dy / dist) * 13, radius: 5, owner: 3 });
-              break;
-            }
-          }
-        }
-        drawWarTank(tank.x, tank.y);
-      });
-
-      drawStickman(player1.x, player1.y, player1.color);
-      drawStickman(player2.x, player2.y, player2.color);
-
-      // Balles
-      for (let i = bullets.length - 1; i >= 0; i--) {
-        let b = bullets[i];
-        b.x += b.vx;
-        b.y += b.vy || 0;
-        ctx.fillStyle = b.owner === 3 ? "#00ffcc" : "#ffff00";
-        ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2); ctx.fill();
-        if (b.x > 1250) bullets.splice(i, 1);
+      // Spawn très lent
+      if (Math.random() < 0.009 + wave * 0.0025) {
+        spawnEnemy();
       }
 
-      // Ennemis
-      if (Math.random() < 0.028) {
-        enemies.push({ x: 1200, y: 420, speed: 4.3, shootTimer: 60 });
-      }
-
+      // Mise à jour ennemis
       for (let i = enemies.length - 1; i >= 0; i--) {
         let e = enemies[i];
-        e.x -= e.speed;
+        if (!e.alive) continue;
+
+        const screenX = e.x - cameraX;
+        if (screenX < -100) { enemies.splice(i,1); continue; }
+
+        drawStickman(screenX, e.y, "#ff4444");
+
         e.shootTimer--;
-
-        drawStickman(e.x, e.y, "#ff4444");
-
         if (e.shootTimer <= 0) {
-          const target = player1.x < player2.x ? player1 : player2;
-          if (target.x < e.x) {
+          let target = player1.alive ? player1 : player2;
+          if (player1.alive && player2.alive) target = player1.x < player2.x ? player1 : player2;
+
+          if (target) {
             const dx = (target.x + 15) - (e.x + 25);
             const dy = (target.y + 25) - (e.y + 25);
             const dist = Math.sqrt(dx*dx + dy*dy) || 1;
-            enemyBullets.push({ x: e.x + 25, y: e.y + 25, vx: (dx / dist) * 5.8, vy: (dy / dist) * 5.8 });
-            e.shootTimer = 65;
+            enemyBullets.push({x: e.x+25, y: e.y+25, vx: (dx/dist)*(4.8 + wave*0.2), vy: (dy/dist)*(4.8 + wave*0.2)});
+            e.shootTimer = 70 + Math.random()*50;
           }
         }
 
+        // Collision tirs
         for (let j = bullets.length - 1; j >= 0; j--) {
           let b = bullets[j];
-          if (b.x > e.x && b.x < e.x + 30 && b.y > e.y && b.y < e.y + 55) {
-            enemies.splice(i, 1);
+          if (b.x > e.x - 8 && b.x < e.x + 42 && b.y > e.y + 5 && b.y < e.y + 55) {
+            e.alive = false;
             bullets.splice(j, 1);
             playExplosionSound();
-            if (b.owner === 1) player1.score += 20;
-            else if (b.owner === 2) player2.score += 20;
-            else player1.score += 15;
+            const points = 30 + wave * 8;
+            if (b.owner === 1) player1.score += points;
+            else player2.score += points;
             document.getElementById("score1").textContent = player1.score;
             document.getElementById("score2").textContent = player2.score;
             break;
           }
         }
-
-        [player1, player2].forEach(p => {
-          if (e.x < p.x + 30 && e.x + 30 > p.x && e.y < p.y + 55 && e.y + 55 > p.y) {
-            lives--;
-            document.getElementById("lives").textContent = lives;
-            playHitSound();
-            enemies.splice(i, 1);
-            if (lives <= 0) {
-              alert("Game Over !\nJ1: " + player1.score + " | J2: " + player2.score);
-              location.reload();
-            }
-          }
-        });
       }
 
-      // Balles ennemies
+      // Tirs joueurs
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        let b = bullets[i];
+        b.x += b.vx;
+        const screenX = b.x - cameraX;
+        ctx.fillStyle = "#ffff00";
+        ctx.beginPath(); ctx.arc(screenX, b.y, b.radius, 0, Math.PI*2); ctx.fill();
+        if (b.x > cameraX + 1500) bullets.splice(i,1);
+      }
+
+      // Tirs ennemis
       for (let i = enemyBullets.length - 1; i >= 0; i--) {
         let b = enemyBullets[i];
         b.x += b.vx; b.y += b.vy;
+        const screenX = b.x - cameraX;
         ctx.fillStyle = "#ff00ff";
-        ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, Math.PI*2); ctx.fill();
-        if (b.x < 0 || b.x > 1200 || b.y < 0 || b.y > 600) enemyBullets.splice(i, 1);
+        ctx.beginPath(); ctx.arc(screenX, b.y, 5, 0, Math.PI*2); ctx.fill();
+
+        if (player1.alive && Math.hypot(b.x - player1.x, b.y - (player1.y + 25)) < 28) {
+          hitPlayer(player1, "lives1"); enemyBullets.splice(i,1);
+        } else if (player2.alive && Math.hypot(b.x - player2.x, b.y - (player2.y + 25)) < 28) {
+          hitPlayer(player2, "lives2"); enemyBullets.splice(i,1);
+        } else if (b.x < cameraX - 100 || b.x > cameraX + 1600) {
+          enemyBullets.splice(i,1);
+        }
       }
 
+      if (player1.alive) drawStickman(player1.x - cameraX, player1.y, player1.color);
+      else drawDeadStickman(player1.x - cameraX, player1.y, player1.color);
+      if (player2.alive) drawStickman(player2.x - cameraX, player2.y, player2.color);
+      else drawDeadStickman(player2.x - cameraX, player2.y, player2.color);
+
       requestAnimationFrame(gameLoop);
+    }
+
+    function gameOver() {
+      alert("Game Over !\nVague atteinte : " + wave + "\nJ1: " + player1.score + " | J2: " + player2.score);
+      location.reload();
     }
 
     gameLoop();
