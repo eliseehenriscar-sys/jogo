@@ -21,7 +21,6 @@
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
 
-    // Demande des noms
     const player1Name = prompt("Entrez le nom du Joueur 1 (Bleu) :", "Joueur Bleu") || "Joueur Bleu";
     const player2Name = prompt("Entrez le nom du Joueur 2 (Vert) :", "Joueur Vert") || "Joueur Vert";
 
@@ -73,7 +72,6 @@
       osc.connect(gain).connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime+0.3);
     }
 
-    // Mise à jour des noms dans l'UI
     document.getElementById("name1").textContent = player1.name;
     document.getElementById("name2").textContent = player2.name;
 
@@ -102,39 +100,33 @@
     }
 
     function drawBackground(){
-      // Ciel
       const gradient=ctx.createLinearGradient(0,0,0,400);
       gradient.addColorStop(0,"#0a1f4d"); gradient.addColorStop(1,"#1e5a9e");
       ctx.fillStyle=gradient; ctx.fillRect(0,0,canvas.width,600);
 
-      // Soleil
       ctx.fillStyle="#ffdd00"; ctx.beginPath(); ctx.arc(280,110,48,0,Math.PI*2); ctx.fill();
       ctx.fillStyle="#ffaa00"; ctx.beginPath(); ctx.arc(280,110,36,0,Math.PI*2); ctx.fill();
 
-      // Points lumineux
       ctx.fillStyle="#ffffff";
       [[80,50],[620,35],[1050,80],[420,120],[880,45]].forEach(s=>{
         ctx.beginPath(); ctx.arc(s[0],s[1],2.8,0,Math.PI*2); ctx.fill();
       });
 
-      // Collines
       ctx.fillStyle="#1e2a1e";
       ctx.beginPath(); ctx.moveTo(0,450); ctx.lineTo(180,280); ctx.lineTo(420,450); ctx.fill();
       ctx.beginPath(); ctx.moveTo(300,450); ctx.lineTo(580,220); ctx.lineTo(850,450); ctx.fill();
       ctx.beginPath(); ctx.moveTo(750,450); ctx.lineTo(980,260); ctx.lineTo(1250,450); ctx.fill();
 
-      // === ROUTE ===
       ctx.fillStyle="#1e5a1e"; 
-      ctx.fillRect(0,445,canvas.width,20);   // herbe
+      ctx.fillRect(0,445,canvas.width,20);
 
       ctx.fillStyle="#333333"; 
-      ctx.fillRect(0,465,canvas.width,80);   // route
+      ctx.fillRect(0,465,canvas.width,80);
 
       ctx.fillStyle="#555555";
       ctx.fillRect(0,465,canvas.width,8);
       ctx.fillRect(0,532,canvas.width,8);
 
-      // Lignes de route
       ctx.strokeStyle = "#ffdd00";
       ctx.lineWidth = 6;
       for(let x = 0; x < canvas.width; x += 80){
@@ -172,7 +164,6 @@
       ctx.beginPath(); ctx.moveTo(x+15,y+38); ctx.lineTo(x+8,y+50);
       ctx.moveTo(x+15,y+38); ctx.lineTo(x+22,y+50); ctx.stroke();
 
-      // Nom du joueur
       ctx.fillStyle = "white";
       ctx.font = "bold 16px Arial";
       ctx.textAlign = "center";
@@ -292,7 +283,7 @@
       updatePlayer(player2,"a","d","w");
 
       frameCount++;
-      if(frameCount%(60*25)===0){
+      if(frameCount % (60 * 16) === 0){   // ← Vagues plus rapides (16 secondes)
         wave++;
         document.getElementById("wave").textContent=wave;
         bossSpawnedThisWave=false;
@@ -340,7 +331,8 @@
 
       updateBoss();
 
-      if(Math.random()<0.028+wave*0.008){
+      // Ennemis apparaissent un peu plus souvent
+      if(Math.random()<0.035 + wave*0.009){
         enemies.push({x:1200,y:420,speed:4.3+wave*0.7,shootTimer:Math.max(25,65-wave*4)});
       }
 
