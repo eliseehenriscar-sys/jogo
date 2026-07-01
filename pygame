@@ -8,6 +8,7 @@
     canvas { border:4px solid #ffcc00; }
     #ui { position:absolute; top:15px; left:15px; color:white; font-family:Arial; font-size:20px; text-shadow:2px 2px 4px black; }
     #highscore { position:absolute; top:15px; right:15px; color:#ffdd00; font-family:Arial; font-size:20px; text-shadow:2px 2px 4px black; text-align:right; }
+    #gamepadInfo { position:absolute; bottom:10px; left:10px; color:#aaa; font-family:Arial; font-size:14px; }
   </style>
 </head>
 <body>
@@ -21,6 +22,7 @@
     RECORD : <span id="highScoreValue">0</span><br>
     <span id="highScoreHolder" style="font-size:16px;"></span>
   </div>
+  <div id="gamepadInfo">Manettes connectées : <span id="gamepadStatus">0</span></div>
 
   <script>
     const canvas = document.getElementById("gameCanvas");
@@ -37,7 +39,7 @@
     let boss=null;
     let bossSpawnedThisWave=false;
 
-    // === RECORD SYSTEM (AJOUTÉ) ===
+    // === RECORD SYSTEM ===
     let highScore = 0;
     let highScoreHolder = "Aucun";
 
@@ -63,12 +65,89 @@
       document.getElementById("highScoreHolder").textContent = highScoreHolder;
     }
 
-    // Chargement du record au démarrage
     loadHighScore();
 
     const keys={};
     const GRAVITY=0.8, JUMP_FORCE=-18;
     const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+
+    // ==================== AJOUT : SUPPORT MANETTES ====================
+    let gamepads = [];
+    let lastGamepadCheck = 0;
+
+    function updateGamepadStatus() {
+      const connected = gamepads.filter(gp => gp !== null).length;
+      document.getElementById("gamepadStatus").textContent = connected;
+    }
+
+    window.addEventListener("gamepadconnected", (e) => {
+      gamepads[e.gamepad.index] = e.gamepad;
+      console.log(`Manette connectée : ${e.gamepad.id} (index ${e.gamepad.index})`);
+      updateGamepadStatus();
+    });
+
+    window.addEventListener("gamepaddisconnected", (e) => {
+      gamepads[e.gamepad.index] = null;
+      console.log(`Manette déconnectée : index ${e.gamepad.index}`);
+      updateGamepadStatus();
+    });
+
+    function getGamepad(playerIndex) {
+      // Player 1 → index 0, Player 2 → index 1
+      return gamepads[playerIndex] || null;
+    }
+
+    function handleGamepadInput() {
+      // Mise à jour des gamepads (nécessaire sur certains navigateurs)
+      gamepads = navigator.getGamepads ? Array.from(navigator.getGamepads()) : [];
+
+      // Joueur 1 - Manette 0
+      const gp1 = getGamepad(0);
+      if (gp1 && player1.alive) {
+        const leftStickX = gp1.axes[0];
+        const leftStickY = gp1.axes[1];
+
+        if (Math.abs(leftStickX) > 0.2) player1.x += player1.speed * leftStickX * 1.1;
+        if (leftStickY < -0.3 && player1.onGround) {
+          player1.vy = JUMP_FORCE;
+          player1.onGround = false;
+        }
+
+        // Tir avec bouton A (index 0) ou Trigger droit
+        if (gp1.buttons[0].pressed || gp1.buttons[7].pressed) {
+          if (!gp1.shootCooldown1 || gp1.shootCooldown1 <= 0) {
+            shoot(player1);
+            playShootSound();
+            gp1.shootCooldown1 = 12;
+          }
+        }
+        if (gp1.shootCooldown1) gp1.shootCooldown1--;
+      }
+
+      // Joueur 2 - Manette 1
+      const gp2 = getGamepad(1);
+      if (gp2 && player2.alive) {
+        const leftStickX = gp2.axes[0];
+        const leftStickY = gp2.axes[1];
+
+        if (Math.abs(leftStickX) > 0.2) player2.x += player2.speed * leftStickX * 1.1;
+        if (leftStickY < -0.3 && player2.onGround) {
+          player2.vy = JUMP_FORCE;
+          player2.onGround = false;
+        }
+
+        // Tir avec bouton A ou Trigger droit
+        if (gp2.buttons[0].pressed || gp2.buttons[7].pressed) {
+          if (!gp2.shootCooldown2 || gp2.shootCooldown2 <= 0) {
+            shoot(player2);
+            playShootSound();
+            gp2.shootCooldown2 = 12;
+          }
+        }
+        if (gp2.shootCooldown2) gp2.shootCooldown2--;
+      }
+    }
+    // ==================== FIN AJOUT MANETTES ====================
 
     function playShootSound(){
       const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();
@@ -313,6 +392,9 @@
       ctx.clearRect(0,0,canvas.width,canvas.height);
       drawBackground();
 
+      // === AJOUT : Gestion des manettes ===
+      handleGamepadInput();
+
       updatePlayer(player1,"arrowleft","arrowright","arrowup");
       updatePlayer(player2,"a","d","w");
 
@@ -446,7 +528,6 @@
     }
 
     function gameOver(){
-      // === MISE À JOUR DU RECORD (AJOUTÉ) ===
       const maxScore = Math.max(player1.score, player2.score);
       if (maxScore > highScore) {
         highScore = maxScore;
