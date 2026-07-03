@@ -71,9 +71,8 @@
     const GRAVITY=0.8, JUMP_FORCE=-18;
     const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
 
-    // ==================== AJOUT : SUPPORT MANETTES ====================
+    // ==================== SUPPORT MANETTES ====================
     let gamepads = [];
-    let lastGamepadCheck = 0;
 
     function updateGamepadStatus() {
       const connected = gamepads.filter(gp => gp !== null).length;
@@ -93,15 +92,12 @@
     });
 
     function getGamepad(playerIndex) {
-      // Player 1 → index 0, Player 2 → index 1
       return gamepads[playerIndex] || null;
     }
 
     function handleGamepadInput() {
-      // Mise à jour des gamepads (nécessaire sur certains navigateurs)
       gamepads = navigator.getGamepads ? Array.from(navigator.getGamepads()) : [];
 
-      // Joueur 1 - Manette 0
       const gp1 = getGamepad(0);
       if (gp1 && player1.alive) {
         const leftStickX = gp1.axes[0];
@@ -113,7 +109,6 @@
           player1.onGround = false;
         }
 
-        // Tir avec bouton A (index 0) ou Trigger droit
         if (gp1.buttons[0].pressed || gp1.buttons[7].pressed) {
           if (!gp1.shootCooldown1 || gp1.shootCooldown1 <= 0) {
             shoot(player1);
@@ -124,7 +119,6 @@
         if (gp1.shootCooldown1) gp1.shootCooldown1--;
       }
 
-      // Joueur 2 - Manette 1
       const gp2 = getGamepad(1);
       if (gp2 && player2.alive) {
         const leftStickX = gp2.axes[0];
@@ -136,7 +130,6 @@
           player2.onGround = false;
         }
 
-        // Tir avec bouton A ou Trigger droit
         if (gp2.buttons[0].pressed || gp2.buttons[7].pressed) {
           if (!gp2.shootCooldown2 || gp2.shootCooldown2 <= 0) {
             shoot(player2);
@@ -147,7 +140,30 @@
         if (gp2.shootCooldown2) gp2.shootCooldown2--;
       }
     }
-    // ==================== FIN AJOUT MANETTES ====================
+    // ==================== FIN MANETTES ====================
+
+    // ==================== TIR CLAVIER R et L ====================
+    let player1ShootCooldown = 0;
+    let player2ShootCooldown = 0;
+
+    function handleKeyboardShooting() {
+      // J1 tire avec R
+      if (keys['r'] && player1.alive && player1ShootCooldown <= 0) {
+        shoot(player1);
+        playShootSound();
+        player1ShootCooldown = 8;
+      }
+      if (player1ShootCooldown > 0) player1ShootCooldown--;
+
+      // J2 tire avec L
+      if (keys['l'] && player2.alive && player2ShootCooldown <= 0) {
+        shoot(player2);
+        playShootSound();
+        player2ShootCooldown = 8;
+      }
+      if (player2ShootCooldown > 0) player2ShootCooldown--;
+    }
+    // ========================================================
 
     function playShootSound(){
       const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();
@@ -392,8 +408,8 @@
       ctx.clearRect(0,0,canvas.width,canvas.height);
       drawBackground();
 
-      // === AJOUT : Gestion des manettes ===
       handleGamepadInput();
+      handleKeyboardShooting();   // ← Tir avec R (J1) et L (J2)
 
       updatePlayer(player1,"arrowleft","arrowright","arrowup");
       updatePlayer(player2,"a","d","w");
