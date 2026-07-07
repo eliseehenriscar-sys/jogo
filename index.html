@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Jogo Pong - Automático</title>
+  <title>Jogo Pong - 1 Joueur</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -12,6 +12,7 @@
       align-items: center;
       height: 100vh;
       background-color: #000;
+      font-family: Arial, sans-serif;
     }
     #game {
       position: relative;
@@ -27,7 +28,7 @@
       height: 100px;
       background-color: white;
     }
-    #paddle-left  { left: 10px; }
+    #paddle-left { left: 10px; }
     #paddle-right { right: 10px; }
     #ball {
       position: absolute;
@@ -42,10 +43,17 @@
       width: 100%;
       text-align: center;
       color: white;
-      font-family: Arial, sans-serif;
       font-size: 42px;
       pointer-events: none;
       z-index: 10;
+    }
+    #instructions {
+      position: absolute;
+      bottom: 15px;
+      width: 100%;
+      text-align: center;
+      color: #aaa;
+      font-size: 16px;
     }
   </style>
 </head>
@@ -55,6 +63,7 @@
     <div id="paddle-left" class="paddle"></div>
     <div id="paddle-right" class="paddle"></div>
     <div id="ball"></div>
+    <div id="instructions">↑ Flèche haut / ↓ Flèche bas</div>
   </div>
 
   <script>
@@ -72,11 +81,15 @@
     let paddleRightPosY = 150;
 
     const paddleHeight = 100;
-    const paddleSpeed = 6;        // Vitesse des raquettes automatiques
+    const paddleSpeed = 8;
     let leftScore = 0;
     let rightScore = 0;
+
     const gameWidth = 800;
     const gameHeight = 400;
+
+    // Contrôle clavier (seulement les flèches)
+    let keys = {};
 
     function updateScore() {
       scoreElement.textContent = `${leftScore} - ${rightScore}`;
@@ -93,26 +106,24 @@
       ballPosX += ballDirectionX;
       ballPosY += ballDirectionY;
 
-      // Rebond haut et bas
       if (ballPosY <= 0 || ballPosY >= gameHeight - 15) {
         ballDirectionY = -ballDirectionY;
       }
 
-      // Collision avec raquette gauche
-      if (ballPosX <= 25 && 
-          ballPosY + 15 >= paddleLeftPosY && 
+      // Collision raquette gauche (joueur)
+      if (ballPosX <= 25 &&
+          ballPosY + 15 >= paddleLeftPosY &&
           ballPosY <= paddleLeftPosY + paddleHeight) {
         ballDirectionX = Math.abs(ballDirectionX) + 0.3;
       }
 
-      // Collision avec raquette droite
-      if (ballPosX >= gameWidth - 35 && 
-          ballPosY + 15 >= paddleRightPosY && 
+      // Collision raquette droite (IA)
+      if (ballPosX >= gameWidth - 35 &&
+          ballPosY + 15 >= paddleRightPosY &&
           ballPosY <= paddleRightPosY + paddleHeight) {
         ballDirectionX = -Math.abs(ballDirectionX) - 0.3;
       }
 
-      // Point marqué
       if (ballPosX <= 0) {
         rightScore++;
         updateScore();
@@ -125,10 +136,10 @@
       }
 
       ball.style.left = `${ballPosX}px`;
-      ball.style.top  = `${ballPosY}px`;
+      ball.style.top = `${ballPosY}px`;
     }
 
-    // IA améliorée pour les deux raquettes
+    // IA pour la raquette droite
     function moveAIPaddle(currentY, targetY) {
       if (currentY + paddleHeight/2 < targetY) {
         return Math.min(currentY + paddleSpeed, gameHeight - paddleHeight);
@@ -139,11 +150,18 @@
     }
 
     function updatePaddles() {
-      // Les deux raquettes suivent automatiquement la balle
-      paddleLeftPosY = moveAIPaddle(paddleLeftPosY, ballPosY + 7.5);
+      // Joueur - seulement flèches haut et bas
+      if (keys['ArrowUp']) {
+        paddleLeftPosY = Math.max(paddleLeftPosY - paddleSpeed, 0);
+      }
+      if (keys['ArrowDown']) {
+        paddleLeftPosY = Math.min(paddleLeftPosY + paddleSpeed, gameHeight - paddleHeight);
+      }
+
+      // IA - raquette droite
       paddleRightPosY = moveAIPaddle(paddleRightPosY, ballPosY + 7.5);
 
-      paddleLeft.style.top  = `${paddleLeftPosY}px`;
+      paddleLeft.style.top = `${paddleLeftPosY}px`;
       paddleRight.style.top = `${paddleRightPosY}px`;
     }
 
@@ -152,6 +170,10 @@
       updatePaddles();
       requestAnimationFrame(gameLoop);
     }
+
+    // Contrôles
+    window.addEventListener('keydown', e => keys[e.key] = true);
+    window.addEventListener('keyup', e => keys[e.key] = false);
 
     // Démarrage
     paddleLeft.style.top = `${paddleLeftPosY}px`;
@@ -162,4 +184,3 @@
   </script>
 </body>
 </html>
-
