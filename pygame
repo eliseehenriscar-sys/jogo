@@ -9,6 +9,7 @@
     #ui { position:absolute; top:15px; left:15px; color:white; font-family:Arial; font-size:20px; text-shadow:2px 2px 4px black; }
     #highscore { position:absolute; top:15px; right:15px; color:#ffdd00; font-family:Arial; font-size:20px; text-shadow:2px 2px 4px black; text-align:right; }
     #gamepadInfo { position:absolute; bottom:10px; left:10px; color:#aaa; font-family:Arial; font-size:14px; }
+    #musicControls { position:absolute; bottom:10px; right:10px; color:#aaa; font-family:Arial; font-size:14px; }
   </style>
 </head>
 <body>
@@ -23,17 +24,22 @@
     <span id="highScoreHolder" style="font-size:16px;"></span>
   </div>
   <div id="gamepadInfo">Manettes connectées : <span id="gamepadStatus">0</span></div>
+  <div id="musicControls">
+    🎵 <button id="toggleMusic" style="background:#333;color:#ffdd00;border:none;padding:5px 10px;cursor:pointer;">Musique ON</button>
+  </div>
+
+  <audio id="bgMusic" loop>
+    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
+    Votre navigateur ne supporte pas l'audio.
+  </audio>
 
   <script>
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
-
     const player1Name = prompt("Entrez le nom du Joueur 1 (Bleu) :", "Joueur Bleu") || "Joueur Bleu";
     const player2Name = prompt("Entrez le nom du Joueur 2 (Vert) :", "Joueur Vert") || "Joueur Vert";
-
     const player1 = { x:200, y:420, speed:7, color:"#00aaff", score:0, vy:0, onGround:true, lives:5, alive:true, name: player1Name };
     const player2 = { x:800, y:420, speed:7, color:"#00ff88", score:0, vy:0, onGround:true, lives:5, alive:true, name: player2Name };
-
     let bullets=[], enemyBullets=[], enemies=[], warTanks=[], smokes=[];
     let wave=1, frameCount=0;
     let boss=null;
@@ -42,7 +48,6 @@
     // === RECORD SYSTEM ===
     let highScore = 0;
     let highScoreHolder = "Aucun";
-
     function loadHighScore() {
       const saved = localStorage.getItem("bonhommeShooterHighScore");
       if (saved) {
@@ -52,42 +57,58 @@
       }
       updateHighScoreDisplay();
     }
-
     function saveHighScore() {
       localStorage.setItem("bonhommeShooterHighScore", JSON.stringify({
         score: highScore,
         holder: highScoreHolder
       }));
     }
-
     function updateHighScoreDisplay() {
       document.getElementById("highScoreValue").textContent = highScore;
       document.getElementById("highScoreHolder").textContent = highScoreHolder;
     }
-
     loadHighScore();
 
     const keys={};
     const GRAVITY=0.8, JUMP_FORCE=-18;
     const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
 
+    // ==================== MUSIQUE DE FOND ====================
+    const bgMusic = document.getElementById("bgMusic");
+    let musicEnabled = true;
+
+    function toggleMusic() {
+      musicEnabled = !musicEnabled;
+      const btn = document.getElementById("toggleMusic");
+      if (musicEnabled) {
+        btn.textContent = "Musique ON";
+        if (bgMusic.paused) bgMusic.play().catch(() => {});
+      } else {
+        btn.textContent = "Musique OFF";
+        bgMusic.pause();
+      }
+    }
+    document.getElementById("toggleMusic").addEventListener("click", toggleMusic);
+
+    function startBackgroundMusic() {
+      if (musicEnabled) {
+        bgMusic.volume = 0.4;
+        bgMusic.play().catch(() => {});
+      }
+    }
+
     // ==================== SUPPORT MANETTES ====================
     let gamepads = [];
-
     function updateGamepadStatus() {
       const connected = gamepads.filter(gp => gp !== null).length;
       document.getElementById("gamepadStatus").textContent = connected;
     }
-
     window.addEventListener("gamepadconnected", (e) => {
       gamepads[e.gamepad.index] = e.gamepad;
-      console.log(`Manette connectée : ${e.gamepad.id} (index ${e.gamepad.index})`);
       updateGamepadStatus();
     });
-
     window.addEventListener("gamepaddisconnected", (e) => {
       gamepads[e.gamepad.index] = null;
-      console.log(`Manette déconnectée : index ${e.gamepad.index}`);
       updateGamepadStatus();
     });
 
@@ -97,18 +118,15 @@
 
     function handleGamepadInput() {
       gamepads = navigator.getGamepads ? Array.from(navigator.getGamepads()) : [];
-
       const gp1 = getGamepad(0);
       if (gp1 && player1.alive) {
         const leftStickX = gp1.axes[0];
         const leftStickY = gp1.axes[1];
-
         if (Math.abs(leftStickX) > 0.2) player1.x += player1.speed * leftStickX * 1.1;
         if (leftStickY < -0.3 && player1.onGround) {
           player1.vy = JUMP_FORCE;
           player1.onGround = false;
         }
-
         if (gp1.buttons[0].pressed || gp1.buttons[7].pressed) {
           if (!gp1.shootCooldown1 || gp1.shootCooldown1 <= 0) {
             shoot(player1);
@@ -118,18 +136,15 @@
         }
         if (gp1.shootCooldown1) gp1.shootCooldown1--;
       }
-
       const gp2 = getGamepad(1);
       if (gp2 && player2.alive) {
         const leftStickX = gp2.axes[0];
         const leftStickY = gp2.axes[1];
-
         if (Math.abs(leftStickX) > 0.2) player2.x += player2.speed * leftStickX * 1.1;
         if (leftStickY < -0.3 && player2.onGround) {
           player2.vy = JUMP_FORCE;
           player2.onGround = false;
         }
-
         if (gp2.buttons[0].pressed || gp2.buttons[7].pressed) {
           if (!gp2.shootCooldown2 || gp2.shootCooldown2 <= 0) {
             shoot(player2);
@@ -140,22 +155,17 @@
         if (gp2.shootCooldown2) gp2.shootCooldown2--;
       }
     }
-    // ==================== FIN MANETTES ====================
 
-    // ==================== TIR CLAVIER R et L ====================
+    // ==================== TIR CLAVIER ====================
     let player1ShootCooldown = 0;
     let player2ShootCooldown = 0;
-
     function handleKeyboardShooting() {
-      // J1 tire avec R
       if (keys['r'] && player1.alive && player1ShootCooldown <= 0) {
         shoot(player1);
         playShootSound();
         player1ShootCooldown = 8;
       }
       if (player1ShootCooldown > 0) player1ShootCooldown--;
-
-      // J2 tire avec L
       if (keys['l'] && player2.alive && player2ShootCooldown <= 0) {
         shoot(player2);
         playShootSound();
@@ -163,7 +173,6 @@
       }
       if (player2ShootCooldown > 0) player2ShootCooldown--;
     }
-    // ========================================================
 
     function playShootSound(){
       const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();
@@ -213,7 +222,6 @@
     }
 
     function isBossWave(w){ return w>=2 && w%2===0; }
-
     function spawnBoss(){
       const bossLives=8+Math.floor((wave-2)/2)*3;
       boss={
@@ -232,30 +240,23 @@
       const gradient=ctx.createLinearGradient(0,0,0,400);
       gradient.addColorStop(0,"#0a1f4d"); gradient.addColorStop(1,"#1e5a9e");
       ctx.fillStyle=gradient; ctx.fillRect(0,0,canvas.width,600);
-
       ctx.fillStyle="#ffdd00"; ctx.beginPath(); ctx.arc(280,110,48,0,Math.PI*2); ctx.fill();
       ctx.fillStyle="#ffaa00"; ctx.beginPath(); ctx.arc(280,110,36,0,Math.PI*2); ctx.fill();
-
       ctx.fillStyle="#ffffff";
       [[80,50],[620,35],[1050,80],[420,120],[880,45]].forEach(s=>{
         ctx.beginPath(); ctx.arc(s[0],s[1],2.8,0,Math.PI*2); ctx.fill();
       });
-
       ctx.fillStyle="#1e2a1e";
       ctx.beginPath(); ctx.moveTo(0,450); ctx.lineTo(180,280); ctx.lineTo(420,450); ctx.fill();
       ctx.beginPath(); ctx.moveTo(300,450); ctx.lineTo(580,220); ctx.lineTo(850,450); ctx.fill();
       ctx.beginPath(); ctx.moveTo(750,450); ctx.lineTo(980,260); ctx.lineTo(1250,450); ctx.fill();
-
-      ctx.fillStyle="#1e5a1e"; 
+      ctx.fillStyle="#1e5a1e";
       ctx.fillRect(0,445,canvas.width,20);
-
-      ctx.fillStyle="#333333"; 
+      ctx.fillStyle="#333333";
       ctx.fillRect(0,465,canvas.width,80);
-
       ctx.fillStyle="#555555";
       ctx.fillRect(0,465,canvas.width,8);
       ctx.fillRect(0,532,canvas.width,8);
-
       ctx.strokeStyle = "#ffdd00";
       ctx.lineWidth = 6;
       for(let x = 0; x < canvas.width; x += 80){
@@ -266,8 +267,7 @@
         ctx.stroke();
       }
       ctx.setLineDash([]);
-
-      ctx.fillStyle="#3a2f1e"; 
+      ctx.fillStyle="#3a2f1e";
       ctx.fillRect(0,545,canvas.width,55);
     }
 
@@ -282,17 +282,31 @@
       ctx.fillStyle="#1e1e1e"; ctx.beginPath(); ctx.arc(x+23,y+16,5,0,Math.PI*2); ctx.fill();
     }
 
-    function drawStickman(x,y,color,name){
+    // === MODIFIÉ : ajout du paramètre facingLeft pour que les armes des ennemis pointent vers les joueurs ===
+    function drawStickman(x,y,color,name, facingLeft = false){
       ctx.strokeStyle=color; ctx.lineWidth=4;
       ctx.beginPath(); ctx.moveTo(x+15,y+10); ctx.lineTo(x+15,y+38); ctx.stroke();
       ctx.beginPath(); ctx.arc(x+15,y+8,8,0,Math.PI*2); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x+15,y+22); ctx.lineTo(x+4,y+30); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x+15,y+22); ctx.lineTo(x+35,y+22); ctx.lineTo(x+45,y+20);
-      ctx.strokeStyle="#333"; ctx.lineWidth=6; ctx.stroke();
+
+      // Bras libre
+      if (facingLeft) {
+        ctx.beginPath(); ctx.moveTo(x+15,y+22); ctx.lineTo(x+26,y+30); ctx.stroke();
+      } else {
+        ctx.beginPath(); ctx.moveTo(x+15,y+22); ctx.lineTo(x+4,y+30); ctx.stroke();
+      }
+
+      // Arme (pointe vers la gauche pour les ennemis)
+      if (facingLeft) {
+        ctx.beginPath(); ctx.moveTo(x+15,y+22); ctx.lineTo(x-5,y+22); ctx.lineTo(x-15,y+20);
+        ctx.strokeStyle="#333"; ctx.lineWidth=6; ctx.stroke();
+      } else {
+        ctx.beginPath(); ctx.moveTo(x+15,y+22); ctx.lineTo(x+35,y+22); ctx.lineTo(x+45,y+20);
+        ctx.strokeStyle="#333"; ctx.lineWidth=6; ctx.stroke();
+      }
+
       ctx.strokeStyle=color; ctx.lineWidth=4;
       ctx.beginPath(); ctx.moveTo(x+15,y+38); ctx.lineTo(x+8,y+50);
       ctx.moveTo(x+15,y+38); ctx.lineTo(x+22,y+50); ctx.stroke();
-
       ctx.fillStyle = "white";
       ctx.font = "bold 16px Arial";
       ctx.textAlign = "center";
@@ -407,15 +421,14 @@
     function gameLoop(){
       ctx.clearRect(0,0,canvas.width,canvas.height);
       drawBackground();
-
       handleGamepadInput();
-      handleKeyboardShooting();   // ← Tir avec R (J1) et L (J2)
-
+      handleKeyboardShooting();
       updatePlayer(player1,"arrowleft","arrowright","arrowup");
       updatePlayer(player2,"a","d","w");
-
       frameCount++;
-      if(frameCount % (60 * 16) === 0){   
+
+      // === VAGUES PLUS RAPIDES ===
+      if(frameCount % (60 * 10) === 0){   // ← Vagues toutes les 10 secondes
         wave++;
         document.getElementById("wave").textContent=wave;
         bossSpawnedThisWave=false;
@@ -457,20 +470,22 @@
 
       if(player1.alive) drawStickman(player1.x,player1.y,player1.color,player1.name);
       else drawDeadStickman(player1.x,player1.y,player1.color,player1.name);
-      
+     
       if(player2.alive) drawStickman(player2.x,player2.y,player2.color,player2.name);
       else drawDeadStickman(player2.x,player2.y,player2.color,player2.name);
 
       updateBoss();
 
-      if(Math.random()<0.035 + wave*0.009){
+      // Apparition des ennemis (un peu plus rapide aussi)
+      if(Math.random()<0.045 + wave*0.012){
         enemies.push({x:1200,y:420,speed:4.3+wave*0.7,shootTimer:Math.max(25,65-wave*4)});
       }
 
       for(let i=enemies.length-1;i>=0;i--){
         let e=enemies[i];
         e.x-=e.speed; e.shootTimer--;
-        drawStickman(e.x,e.y,"#ff4444","Ennemi");
+        // === MODIFIÉ : facingLeft = true pour que l'arme pointe vers les joueurs ===
+        drawStickman(e.x,e.y,"#ff4444","Ennemi", true);
         if(e.shootTimer<=0){
           let target=null;
           if(player1.alive&&player2.alive) target=player1.x<player2.x?player1:player2;
@@ -536,7 +551,7 @@
         ctx.fillStyle="rgba(255,100,0,0.08)";
         ctx.fillRect(0,0,canvas.width,canvas.height);
         ctx.fillStyle="#ff6600"; ctx.font="bold 16px Arial"; ctx.textAlign="center";
-        ctx.fillText("⚠ MASTER EN JEU ⚠  ❤ "+boss.lives+" / "+boss.maxLives, canvas.width/2, 580);
+        ctx.fillText("⚠ MASTER EN JEU ⚠ ❤ "+boss.lives+" / "+boss.maxLives, canvas.width/2, 580);
         ctx.textAlign="left";
       }
 
@@ -551,13 +566,16 @@
         saveHighScore();
         updateHighScoreDisplay();
       }
-
+      bgMusic.pause();
       alert("Game Over !\nVague atteinte : "+wave+"\n\n"+
             player1.name + " (Bleu): " + player1.score + "\n" +
             player2.name + " (Vert): " + player2.score + "\n\n" +
-            "🏆 NOUVEAU RECORD : " + highScore + " par " + highScoreHolder);
+            "🏆 RECORD : " + highScore + " par " + highScoreHolder);
       location.reload();
     }
+
+    canvas.addEventListener("click", startBackgroundMusic, {once: true});
+    canvas.addEventListener("contextmenu", startBackgroundMusic, {once: true});
 
     gameLoop();
   </script>
